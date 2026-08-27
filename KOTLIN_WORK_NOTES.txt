@@ -1,0 +1,1031 @@
+Kotlin 작업 학습 노트
+====================
+
+목적
+----
+- Diary 프로젝트를 작업하면서 만난 Kotlin 문법을 빠르게 다시 확인한다.
+- 문법 이름보다 "언제 왜 썼는지"를 중심으로 기억한다.
+- 처음부터 외우기보다, 코드를 읽다가 막힐 때 이 문서를 검색한다.
+
+
+1. 클래스와 데이터 표현
+======================
+
+1-1. val과 var
+---------------
+
+val: 한 번 대입한 뒤 다른 값으로 바꿀 수 없다.
+var: 나중에 다른 값으로 바꿀 수 있다.
+
+    val size = 20
+    var currentSize = 10
+    currentSize = 20
+
+객체를 안전하게 다루기 위해 가능하면 val을 우선 사용한다.
+
+
+1-2. class와 data class
+-----------------------
+
+일반 class는 행동과 책임을 가진 객체에 주로 사용한다.
+
+    class DiaryService(...)
+    class DiaryRepository(...)
+    class DiaryController(...)
+
+data class는 값이 객체의 의미를 결정하는 데이터에 주로 사용한다.
+
+    data class CursorQuery(
+        val cursorId: UUID? = null,
+        val size: Int = 20,
+    )
+
+data class가 자동으로 만들어 주는 것:
+- equals() / hashCode(): 속성 값으로 비교
+- toString(): 속성을 읽기 좋게 출력
+- copy(): 일부 속성만 바꾼 새 객체 생성
+- componentN(): 구조 분해 지원
+
+componentN의 N은 실제 함수 이름에 들어가는 글자가 아니라 순서를 나타내는 숫자다.
+즉 component1(), component2(), ..., componentN()을 통틀어 부르는 표현이다.
+각 함수는 주 생성자에 선언된 속성을 순서대로 반환한다.
+
+    component1() -> 첫 번째 속성인 cursorId
+    component2() -> 두 번째 속성인 size
+
+    val largerQuery = query.copy(size = 50)
+    val (cursorId, size) = query
+
+위 구조 분해는 내부적으로 cursorId에 component1()의 결과를,
+size에 component2()의 결과를 넣는 방식으로 동작한다.
+
+주의: 자동 생성 기능은 주 생성자에 선언된 속성을 기준으로 한다.
+
+
+1-3. 객체 생성과 생성자
+-----------------------
+
+Kotlin에서는 Java와 달리 new 없이 클래스 이름을 함수처럼 호출해 객체를 생성한다.
+
+    val person = Person("철수", 20)
+
+클래스 이름 옆의 괄호에 주 생성자(primary constructor)를 선언한다.
+
+    class Person(
+        val name: String,
+        val age: Int,
+    )
+
+일부 인자만 전달하고 싶다면 생성자 매개변수에 기본값을 지정한다.
+이름 있는 인자를 사용하면 원하는 값만 명확하게 전달할 수 있다.
+
+    class Person(
+        val name: String,
+        val age: Int = 0,
+        val city: String = "서울",
+    )
+
+    val person1 = Person("철수")
+    val person2 = Person("영희", age = 25)
+    val person3 = Person(name = "민수", city = "부산")
+
+여러 형태의 생성자가 꼭 필요하면 constructor로 보조 생성자(secondary constructor)를 만든다.
+보조 생성자는 this(...)를 통해 주 생성자를 호출해야 한다.
+
+    class Person(
+        val name: String,
+        val age: Int,
+    ) {
+        constructor(name: String) : this(name, 0)
+    }
+
+    val person = Person("철수")
+
+대부분은 보조 생성자보다 기본값과 이름 있는 인자를 우선 사용한다.
+
+
+1-4. init과 require
+--------------------
+
+init은 객체가 생성될 때 실행된다.
+require는 외부에서 들어온 생성자 인자나 함수 인자가 조건을 만족하는지 검사한다.
+
+    data class CursorQuery(
+        val cursorId: UUID? = null,
+        val size: Int = 20,
+    ) {
+        init {
+            require(size in 1..100) {
+                "size must be between 1 and 100"
+            }
+        }
+    }
+
+조건을 만족하지 않으면 IllegalArgumentException이 발생한다.
+
+관련 함수:
+- require(condition): 잘못된 인자 검사
+- check(condition): 잘못된 객체 상태 검사
+- requireNotNull(value): null이면 예외, 아니면 non-null 값 반환
+- checkNotNull(value): null인 객체 상태 검사
+
+
+2. Null 안전성
+==============
+
+2-1. nullable 타입 ?
+--------------------
+
+타입 뒤의 ?는 null이 들어올 수 있다는 뜻이다.
+
+    val cursorId: UUID? = null
+
+UUID와 UUID?는 서로 다른 타입이다.
+
+
+2-2. 안전 호출 ?.
+------------------
+
+값이 null이 아니면 뒤의 속성이나 함수를 호출한다.
+값이 null이면 호출하지 않고 전체 결과가 null이 된다.
+
+    val lastId = items.lastOrNull()?.id
+
+
+2-3. Elvis 연산자 ?:
+---------------------
+
+왼쪽 결과가 null이면 오른쪽 값을 사용한다.
+
+    val condition = query.cursorId
+        ?.let(DIARIES.ID::lessThan)
+        ?: noCondition()
+
+오른쪽에 return이나 throw도 사용할 수 있다.
+
+    val diary = repository.findById(id)
+        ?: throw DiaryNotFoundException(id)
+
+    val cursorId = query.cursorId ?: return firstSlice()
+
+Kotlin에는 Java/JavaScript의 condition ? a : b 삼항 연산자가 없다.
+대신 if가 값을 반환한다.
+
+    val direction = if (ascending) "ASC" else "DESC"
+
+
+2-4. 강제 non-null !!
+----------------------
+
+    val id = diary.id!!
+
+값이 null이면 NullPointerException이 발생한다.
+정말 null이 아님을 보장할 수 있을 때만 사용하고, 가능하면 안전 호출이나
+requireNotNull을 사용한다.
+
+
+2-5. 안전한 타입 변환 as?
+-------------------------
+
+변환할 수 없으면 예외 대신 null을 반환한다.
+
+    val text = value as? String
+
+
+3. 함수, 람다, 함수 참조
+=======================
+
+3-1. ()와 {}
+-------------
+
+(): 함수를 호출하고 인자를 전달한다.
+{}: 실행할 로직인 람다 함수를 표현한다.
+
+    diaries.take(10)
+    diaries.map({ diary -> diary.title })
+
+마지막 인자가 람다라면 괄호 밖으로 뺄 수 있다.
+
+    diaries.map { diary -> diary.title }
+    diaries.map { it.title }
+
+아래 두 코드는 같은 의미다.
+
+    diaries.map({ it.title })
+    diaries.map { it.title }
+
+
+3-2. 람다의 it
+---------------
+
+람다 인자가 하나이면 이름을 생략하고 it으로 받을 수 있다.
+
+    diaries.filter { it.title.isNotBlank() }
+
+로직이 길거나 중첩되면 명시적인 이름이 더 읽기 쉽다.
+
+    diaries.map { diary ->
+        DiaryPreviewResponse(diary)
+    }
+
+
+3-3. 함수 참조 ::
+-----------------
+
+이미 존재하는 함수나 생성자를 람다 대신 전달한다.
+
+    diaries.map(::DiaryPreviewResponse)
+
+다음 코드와 같은 의미다.
+
+    diaries.map { diary -> DiaryPreviewResponse(diary) }
+
+멤버 함수도 참조할 수 있다.
+
+    query.cursorId?.let(DIARIES.ID::lessThan)
+
+
+3-4. 함수 타입
+---------------
+
+    transform: (T) -> R
+
+T 하나를 받아 R을 반환하는 함수라는 의미다.
+transform은 예약어가 아니라 관례적으로 사용하는 매개변수 이름이다.
+mapper, converter 등 다른 이름을 사용해도 된다.
+
+
+4. 범위 함수(scope functions)
+============================
+
+4-1. let
+----------
+
+객체를 람다 인자로 전달하고, 람다의 마지막 결과를 반환한다.
+특히 ?.let 조합으로 nullable 값을 처리할 때 자주 사용한다.
+
+    val condition = query.cursorId?.let { cursorId ->
+        DIARIES.ID.lessThan(cursorId)
+    } ?: noCondition()
+
+cursorId가 null이면 let 블록은 실행되지 않는다.
+
+
+4-2. apply
+------------
+
+객체를 설정하고 그 객체 자체를 반환한다. 블록 안에서는 this를 사용한다.
+
+    val request = SomeRequest().apply {
+        size = 20
+        enabled = true
+    }
+
+주로 객체 초기화에 사용한다.
+
+
+4-3. also
+-----------
+
+객체를 it으로 받아 부가 작업을 하고 객체 자체를 반환한다.
+
+    val diary = repository.save(diary)
+        .also { logger.info { "saved: ${it.id}" } }
+
+로깅이나 디버깅처럼 주 흐름을 바꾸지 않는 작업에 어울린다.
+
+
+4-4. run과 with
+----------------
+
+run: 객체를 this로 사용하고 블록 결과를 반환한다.
+with: 객체를 인자로 전달받아 블록 결과를 반환한다.
+
+범위 함수는 짧게 만든다는 이유만으로 중첩하지 않는다.
+평범한 지역 변수와 if가 더 읽기 쉬우면 그것을 사용한다.
+
+
+5. 컬렉션에서 자주 쓰는 함수
+============================
+
+5-1. map
+----------
+
+각 원소를 다른 형태로 변환한다.
+
+    val responses = diaries.map(::DiaryPreviewResponse)
+
+
+5-2. filter
+-------------
+
+조건에 맞는 원소만 남긴다.
+
+    val valid = diaries.filter { it.title.isNotBlank() }
+
+
+5-3. take
+-----------
+
+앞에서 최대 n개를 가져온다.
+원소가 n개보다 적어도 예외가 발생하지 않는다.
+
+    val items = fetched.take(query.size)
+
+문자열에도 사용할 수 있다.
+
+    val preview = diary.content.take(10)
+
+
+5-4. slice와 subList 주의
+--------------------------
+
+    text.slice(0..10)
+
+0..10은 0부터 10까지 포함하므로 총 11개다.
+범위를 벗어나면 예외가 발생할 수 있다.
+
+    list.subList(fromIndex, toIndex)
+
+toIndex는 포함하지 않으며, 인덱스 계산이 잘못되면 예외가 발생한다.
+단순히 앞에서 최대 n개가 필요하다면 take(n)이 안전하고 명확하다.
+
+
+5-5. firstOrNull과 lastOrNull
+-----------------------------
+
+    val first = items.firstOrNull()
+    val last = items.lastOrNull()
+
+빈 리스트에서는 null을 반환한다.
+first()와 last()는 빈 리스트에서 NoSuchElementException을 던진다.
+
+
+5-6. find
+----------
+
+조건에 맞는 첫 번째 원소를 찾고 없으면 null을 반환한다.
+
+    val diary = diaries.find { it.id == targetId }
+
+firstOrNull { 조건 }과 거의 같은 용도로 사용할 수 있다.
+
+
+5-7. any, all, none
+--------------------
+
+    diaries.any { it.title.isBlank() }   // 하나라도 만족
+    diaries.all { it.title.isNotBlank() } // 모두 만족
+    diaries.none { it.title.isBlank() }  // 하나도 만족하지 않음
+
+
+5-8. associateBy와 groupBy
+--------------------------
+
+    val diaryById = diaries.associateBy { it.id }
+    val diariesByTitle = diaries.groupBy { it.title }
+
+associateBy는 각 원소에서 키를 뽑아 Map<Key, Diary>를 만든다.
+id가 고유하다면 id와 Diary가 1:1로 연결되는 형태다.
+
+    // Map<UUID, Diary>
+    val diaryById = diaries.associateBy { it.id }
+    val diary = diaryById[targetId]
+
+주의: associateBy가 키의 고유성을 검사하는 것은 아니다.
+같은 키가 여러 번 나오면 앞의 값이 덮어써지고 마지막 원소만 남는다.
+따라서 id처럼 고유성이 보장되는 값을 키로 사용할 때 잘 맞는다.
+
+groupBy는 같은 키를 가진 원소를 모두 모아 Map<Key, List<Diary>>를 만든다.
+title이 같은 Diary가 여러 개라면 title과 Diary가 1:N으로 연결되는 형태다.
+
+    // Map<String, List<Diary>>
+    val diariesByTitle = diaries.groupBy { it.title }
+    val sameTitleDiaries = diariesByTitle["오늘"]
+
+해당 title의 Diary가 하나뿐이어도 Map의 값은 Diary가 아니라 List<Diary>다.
+
+정리:
+- associateBy: 키 하나당 값 하나. 중복 키는 마지막 값만 남는다.
+- groupBy: 키 하나당 값 목록. 중복 키의 값을 모두 List에 모은다.
+
+
+5-9. distinctBy와 sortedBy
+--------------------------
+
+    diaries.distinctBy { it.id }
+    diaries.sortedBy { it.title }
+    diaries.sortedByDescending { it.id }
+
+
+6. 조건식과 제어 흐름
+====================
+
+6-1. if는 표현식
+-----------------
+
+if의 결과를 변수에 바로 넣거나 반환할 수 있다.
+
+    val nextCursorId =
+        if (hasNext) items.lastOrNull()?.id
+        else null
+
+
+6-2. when
+-----------
+
+여러 조건이나 타입을 분기할 때 사용한다.
+
+    val message = when {
+        size <= 0 -> "invalid size"
+        size > 100 -> "too large"
+        else -> "valid"
+    }
+
+enum이나 sealed class와 함께 사용하면 모든 경우를 검사하기 좋다.
+
+
+6-3. takeIf와 takeUnless
+------------------------
+
+takeIf는 조건이 true이면 객체를 반환하고 아니면 null을 반환한다.
+
+    val nextCursorId = items
+        .lastOrNull()
+        ?.id
+        ?.takeIf { hasNext }
+
+takeUnless는 조건이 false일 때 객체를 반환한다.
+짧더라도 의미가 더 흐려진다면 평범한 if를 사용한다.
+
+
+7. 제네릭과 타입 추론
+====================
+
+7-1. 제네릭 타입
+-----------------
+
+    data class CursorSlice<T>(
+        val items: List<T>,
+        val hasNext: Boolean,
+        val nextCursorId: UUID?,
+    )
+
+T 자리에 원하는 타입이 들어갈 수 있다.
+
+    CursorSlice<Diary>
+    CursorSlice<DiaryPreviewResponse>
+
+
+7-2. Kotlin에는 다이아몬드 <>가 없다
+------------------------------------
+
+Java:
+
+    new ArrayList<String>()
+    new ArrayList<>()
+
+Kotlin은 타입을 추론할 수 있으면 제네릭 표기를 통째로 생략한다.
+
+    val response = CursorSlice(
+        items = previewItems,
+        hasNext = hasNext,
+        nextCursorId = nextCursorId,
+    )
+
+명시할 수도 있다.
+
+    CursorSlice<DiaryPreviewResponse>(...)
+
+CursorSlice<>(...) 문법은 없다.
+
+
+7-3. copy는 제네릭 타입을 바꾸지 못한다
+--------------------------------------
+
+CursorSlice<Diary>.copy()의 결과는 여전히 CursorSlice<Diary>다.
+
+    // List<DiaryPreviewResponse>를 넣을 수 없어서 컴파일되지 않는다.
+    slice.copy(items = slice.items.map(::DiaryPreviewResponse))
+
+타입을 바꾸려면 새 객체를 만들거나 별도의 mapItems 함수가 필요하다.
+
+
+7-4. mapItems 멤버 함수
+-----------------------
+
+    data class CursorSlice<T>(...) {
+        fun <R> mapItems(transform: (T) -> R): CursorSlice<R> =
+            CursorSlice(
+                items = items.map(transform),
+                hasNext = hasNext,
+                nextCursorId = nextCursorId,
+            )
+    }
+
+사용:
+
+    slice.mapItems(::DiaryPreviewResponse)
+
+
+7-5. 타입 소거와 inline reified
+--------------------------------
+
+JVM에서는 List<Diary>와 List<User> 같은 제네릭 타입의 타입 인자가
+런타임에 기본적으로 소거된다. 따라서 일반 제네릭 함수 안에서는 T를
+직접 타입 검사나 클래스 참조에 사용할 수 없다.
+
+    fun <T> isType(value: Any): Boolean =
+        value is T // 컴파일되지 않는다.
+
+inline 함수의 타입 매개변수에 reified를 붙이면 호출 위치의 실제 타입을
+함수 본문에서 사용할 수 있다. reified는 "구체화된"이라는 뜻이다.
+
+    inline fun <reified T> isType(value: Any): Boolean =
+        value is T
+
+    isType<String>("hello") // true
+    isType<Int>("hello")    // false
+
+reified 타입 매개변수로 할 수 있는 대표적인 작업:
+
+    inline fun <reified T> Any?.castOrNull(): T? = this as? T
+
+    inline fun <reified T> printTypeName() {
+        println(T::class.simpleName)
+    }
+
+    val text: String? = value.castOrNull<String>()
+    printTypeName<Diary>()
+
+reified는 inline 함수의 타입 매개변수에만 사용할 수 있다. 함수 코드가
+호출 위치에 들어갈 때 컴파일러가 T를 String, Diary 같은 실제 타입으로
+바꿀 수 있기 때문이다.
+
+주의: reified가 JVM의 타입 소거를 완전히 없애는 것은 아니다.
+value is List<String> 같은 검사는 바깥 객체가 List인지는 알 수 있어도
+모든 원소가 실제로 String인지는 보장하지 못한다. 필요하면 원소를 검사한다.
+
+    inline fun <reified T> List<*>.allElementsAre(): Boolean =
+        all { it is T }
+
+
+7-6. typeOf<T>()와 KType
+-------------------------
+
+typeOf<T>()는 타입 정보를 Kotlin의 KType 객체로 반환한다.
+
+    import kotlin.reflect.typeOf
+
+    val type = typeOf<List<Diary?>>()
+
+KClass는 주로 Diary 같은 클래스 자체를 나타내지만, KType은 제네릭 타입
+인자와 null 가능 여부까지 표현할 수 있다.
+
+    val type = typeOf<List<Diary?>>()
+
+    type.classifier       // List의 KClass
+    type.isMarkedNullable // false: 바깥 List는 non-null
+    type.arguments        // Diary? 타입 인자
+
+    val nullableListType = typeOf<List<Diary>?>()
+    nullableListType.isMarkedNullable // true
+
+reified 함수 안에서 typeOf<T>()를 사용하면 호출자가 전달한 상세 타입을
+KType으로 얻을 수 있다.
+
+    inline fun <reified T> printDetailedType() {
+        val type = typeOf<T>()
+        println("type: $type")
+        println("nullable: ${type.isMarkedNullable}")
+        println("arguments: ${type.arguments}")
+    }
+
+    printDetailedType<List<Diary?>>()
+
+JVM에서 Java 라이브러리가 java.lang.reflect.Type을 요구하면 KType의
+javaType을 사용할 수 있다.
+
+    import kotlin.reflect.jvm.javaType
+
+    val javaType = typeOf<List<Diary>>().javaType
+
+Jackson Kotlin 모듈은 inline reified 확장 함수로 TypeReference 생성을
+내부에 감춘다. 따라서 제네릭 JSON도 다음처럼 읽을 수 있다.
+
+    import com.fasterxml.jackson.module.kotlin.readValue
+
+    val diary: Diary = objectMapper.readValue(json)
+    val diaries: List<Diary> = objectMapper.readValue(json)
+    val slice: CursorSlice<Diary> = objectMapper.readValue(json)
+
+명시적으로 타입 인자를 적어도 된다.
+
+    val diaries = objectMapper.readValue<List<Diary>>(json)
+
+정리:
+- T::class: T의 클래스 정보가 필요할 때
+- inline reified T: 제네릭 함수에서 is T, as? T, T::class를 사용할 때
+- typeOf<T>(): 제네릭 인자와 null 여부를 포함한 KType이 필요할 때
+- Jackson readValue<T>(): TypeReference를 직접 작성하지 않고 JSON을 읽을 때
+
+
+8. 확장 함수
+============
+
+기존 클래스를 수정하거나 상속하지 않고 새 함수처럼 사용할 수 있다.
+
+    fun <T, R> CursorSlice<T>.mapItems(
+        transform: (T) -> R,
+    ): CursorSlice<R> =
+        CursorSlice(
+            items = items.map(transform),
+            hasNext = hasNext,
+            nextCursorId = nextCursorId,
+        )
+
+최상위 확장 함수는 class의 닫는 중괄호 밖에 선언한다.
+다른 패키지에서 사용하면 import가 필요하다.
+
+    import com.example.diary.pagination.mapItems
+
+주의할 형태:
+
+    data class CursorSlice<T>(...) {
+        fun <T, R> CursorSlice<T>.mapItems(...) // 멤버 확장 함수
+    }
+
+이 형태는 CursorSlice의 평범한 멤버 함수가 아니다. 특별히 멤버 확장이
+필요한 상황이 아니라면 일반 멤버 함수 또는 최상위 확장 함수로 선언한다.
+
+
+9. Diary 프로젝트에서 적용한 구조
+=================================
+
+9-1. 응답 DTO
+--------------
+
+Diary 전체를 그대로 반환하지 않고 목록에 필요한 값만 응답한다.
+
+    data class DiaryPreviewResponse(
+        val id: UUID,
+        val title: String,
+        val content: String,
+    ) {
+        constructor(diary: Diary) : this(
+            id = requireNotNull(diary.id),
+            title = diary.title,
+            content = diary.content.take(10),
+        )
+    }
+
+Diary 생성 시 Diary의 init 검증은 이미 실행된다.
+Response가 Diary의 init을 가져오거나 상속할 필요는 없다.
+
+
+9-2. 계층별 이름과 책임
+------------------------
+
+Controller:
+- HTTP 요청 파라미터를 받는다.
+- Diary를 DiaryPreviewResponse로 바꾼다.
+- 응답 형태를 반환한다.
+
+Service:
+- 조회 흐름과 업무 규칙을 조율한다.
+
+Repository:
+- jOOQ로 SQL 조회를 실행한다.
+- size + 1 조회 및 커서 경계를 처리한다.
+
+예시 이름:
+
+    Controller: getDiaryPreviews(query)
+    Service:    findDiarySlice(query) 또는 getDiaryPreviews(query)
+    Repository: findSlice(query)
+
+클래스 이름에 이미 DiaryRepository가 있으므로 Repository 메서드는
+findDiarySlice보다 findSlice로 간결하게 표현해도 문맥이 유지된다.
+
+
+9-3. CursorQuery
+-----------------
+
+페이지 번호 대신 마지막으로 확인한 정렬 기준 ID와 조회 크기를 전달한다.
+
+    data class CursorQuery(
+        val cursorId: UUID? = null,
+        val size: Int = 20,
+    )
+
+첫 요청에는 cursorId가 없다.
+
+    GET /diary?size=20
+
+다음 요청에는 이전 응답의 nextCursorId를 전달한다.
+
+    GET /diary?cursorId={id}&size=20
+
+
+9-4. CursorSlice
+-----------------
+
+Page는 현재 페이지, 전체 페이지 수, 전체 개수를 암시한다.
+커서 조회는 전체 중 특정 구간만 반환하므로 Slice가 더 잘 맞는다.
+
+    data class CursorSlice<T>(
+        val items: List<T>,
+        val hasNext: Boolean,
+        val nextCursorId: UUID?,
+    )
+
+
+9-5. hasNext 계산
+------------------
+
+요청 크기보다 한 개 더 조회한다.
+
+    .limit(query.size + 1)
+
+조회 후:
+
+    val hasNext = fetched.size > query.size
+    val items = fetched.take(query.size)
+
+11개를 요청해서 11개가 조회되고 size가 10이면 다음 데이터가 있다.
+COUNT(*) 없이 다음 구간 존재 여부를 판단할 수 있다.
+
+
+9-6. jOOQ Condition
+--------------------
+
+Condition은 인터페이스이므로 Condition()으로 생성하지 않는다.
+조건이 없을 때 DSL.noCondition()을 사용할 수 있다.
+
+    val condition = query.cursorId
+        ?.let(DIARIES.ID::lessThan)
+        ?: noCondition()
+
+    dsl.selectFrom(DIARIES)
+        .where(condition)
+        .orderBy(DIARIES.ID.desc())
+        .limit(query.size + 1)
+
+정렬과 커서 조건 방향:
+
+    ORDER BY id ASC  -> id > cursorId
+    ORDER BY id DESC -> id < cursorId
+
+
+9-7. jOOQ seek
+---------------
+
+seek는 orderBy 방향에 맞춰 커서 이후의 조건을 만들어 주는 jOOQ 기능이다.
+
+    dsl.selectFrom(DIARIES)
+        .orderBy(DIARIES.ID.desc())
+        .seek(cursorId)
+        .limit(size)
+
+ID 내림차순에서는 대략 WHERE id < cursorId와 같은 역할을 한다.
+
+복합 정렬에서 특히 유용하다.
+
+    .orderBy(DIARIES.CREATED_AT.desc(), DIARIES.ID.desc())
+    .seek(cursorCreatedAt, cursorId)
+
+seek 인자의 개수와 순서는 orderBy 필드와 맞아야 한다.
+
+
+10. 바로 이어서 알아두면 유용한 Kotlin 기능
+============================================
+
+10-1. 기본 인자와 이름 있는 인자
+-------------------------------
+
+    fun find(size: Int = 20, enabled: Boolean = true) { ... }
+
+    find(enabled = false)
+
+호출부에서 인자의 의미가 분명해지고, 필요 없는 기본값은 생략할 수 있다.
+
+
+10-2. 식 본문 함수
+------------------
+
+함수 로직이 표현식 하나라면 중괄호와 return을 줄일 수 있다.
+
+    fun findAll(): List<Diary> = diaryRepository.findAll()
+
+
+10-3. 문자열 템플릿
+-------------------
+
+    val message = "Diary id: ${diary.id}"
+    val simple = "size: $size"
+
+
+10-4. Pair와 Triple은 짧은 지역 용도로만
+-----------------------------------------
+
+    val result = id to title
+
+서로 다른 계층으로 전달하거나 의미가 중요하면 이름 있는 data class가 낫다.
+
+    data class DiaryKey(
+        val id: UUID,
+        val title: String,
+    )
+
+
+10-5. sealed class / sealed interface
+--------------------------------------
+
+가능한 결과 종류를 제한할 때 유용하다.
+
+    sealed interface CreateDiaryResult {
+        data class Success(val diary: Diary) : CreateDiaryResult
+        data object Duplicate : CreateDiaryResult
+    }
+
+when과 사용하면 빠뜨린 분기를 컴파일러가 확인할 수 있다.
+
+
+10-6. value class
+------------------
+
+같은 UUID라도 의미가 다른 ID가 섞이는 것을 막을 수 있다.
+
+    @JvmInline
+    value class DiaryId(val value: UUID)
+
+작은 프로젝트에서는 Jackson, jOOQ 변환 설정이 늘어날 수 있으므로 필요성이
+명확할 때 도입한다.
+
+
+10-7. Sequence
+---------------
+
+컬렉션 연산이 아주 많고 데이터가 클 때 중간 리스트 생성을 줄일 수 있다.
+
+    values.asSequence()
+        .filter { it.isValid() }
+        .map { it.toResponse() }
+        .take(20)
+        .toList()
+
+작은 컬렉션에는 일반 List 연산이 더 단순하고 충분하다.
+jOOQ 조회 결과를 줄이는 일은 Sequence보다 SQL의 WHERE/LIMIT으로 먼저 한다.
+
+
+10-8. runCatching과 Result
+--------------------------
+
+runCatching은 블록을 실행하고 성공 값이나 발생한 예외를 Result<T>에 담는다.
+try-catch를 없애는 기능이라기보다, 성공과 실패를 하나의 값으로 표현하는
+방법이다.
+
+    val result: Result<Diary> = runCatching {
+        diaryRepository.findById(id)
+            ?: throw DiaryNotFoundException(id)
+    }
+
+Result에서 자주 사용하는 함수:
+- getOrNull(): 성공 값, 실패하면 null
+- exceptionOrNull(): 실패 예외, 성공하면 null
+- getOrElse { ... }: 실패할 때 대체 값을 반환
+- getOrDefault(value): 실패할 때 고정된 기본값 반환
+- getOrThrow(): 성공 값을 반환하고 실패 예외는 다시 던짐
+- map { ... }: 성공 값만 변환
+- mapCatching { ... }: 성공 값을 변환하며 변환 중 예외도 Result 실패로 담음
+- recover { ... }: 실패를 다른 성공 값으로 복구
+- recoverCatching { ... }: 복구 중 발생한 예외도 Result 실패로 담음
+
+    val title = runCatching { loadDiary(id) }
+        .map { it.title }
+        .getOrElse { "제목 없음" }
+
+getOrNull은 실패 이유가 중요하지 않을 때만 사용한다. 무조건 null로 바꾸면
+장애와 "값이 없음"을 구분할 수 없게 된다.
+
+    // 파일이 없거나 읽기에 실패하면 빈 문자열을 사용한다는 정책이 명확할 때
+    val content = runCatching { file.readText() }
+        .getOrDefault("")
+
+
+10-9. fold로 성공과 실패를 한 번에 처리하기
+----------------------------------------------
+
+fold는 Result의 성공과 실패를 각각 처리하고 최종 값 하나를 반환한다.
+두 람다의 반환 타입은 서로 호환되어야 한다.
+
+    val message: String = runCatching { loadDiary(id) }
+        .fold(
+            onSuccess = { diary -> "조회 성공: ${diary.title}" },
+            onFailure = { exception -> "조회 실패: ${exception.message}" },
+        )
+
+서비스 결과 타입으로 바꿀 때도 사용할 수 있다.
+
+    sealed interface FindDiaryResult {
+        data class Success(val diary: Diary) : FindDiaryResult
+        data object NotFound : FindDiaryResult
+        data class Failure(val cause: Throwable) : FindDiaryResult
+    }
+
+    val result: FindDiaryResult = runCatching { loadDiary(id) }
+        .fold(
+            onSuccess = { diary -> FindDiaryResult.Success(diary) },
+            onFailure = { exception ->
+                when (exception) {
+                    is DiaryNotFoundException -> FindDiaryResult.NotFound
+                    else -> FindDiaryResult.Failure(exception)
+                }
+            },
+        )
+
+fold는 성공과 실패에서 모두 값을 만들어야 할 때 잘 맞는다. 실패 시 기본값만
+필요하면 getOrElse, 실패를 다시 던질 거라면 getOrThrow가 더 간단하다.
+
+
+10-10. onSuccess와 onFailure
+----------------------------
+
+onSuccess와 onFailure는 로깅 같은 부가 작업을 수행하고 원래 Result를 그대로
+반환한다. 따라서 뒤에 값을 꺼내거나 다른 Result 연산을 이어갈 수 있다.
+
+    val diary = runCatching { loadDiary(id) }
+        .onSuccess { logger.info { "diary loaded: ${it.id}" } }
+        .onFailure { logger.error(it) { "diary load failed: $id" } }
+        .getOrThrow()
+
+onFailure를 호출했다고 예외가 처리되거나 사라지는 것은 아니다. 위 코드는
+실패를 기록한 뒤 getOrThrow()에서 원래 예외를 다시 던진다.
+
+
+10-11. runCatching 사용 시 주의점
+---------------------------------
+
+모든 함수 전체를 무작정 runCatching으로 감싸면 프로그래밍 오류와 시스템
+장애까지 정상적인 실패 값처럼 취급하여 원인을 숨길 수 있다.
+
+    // 범위가 너무 넓고 모든 실패를 같은 값으로 숨긴다.
+    fun createDiary(request: CreateDiaryRequest): Boolean =
+        runCatching {
+            validate(request)
+            diaryRepository.save(request.toDiary())
+            eventPublisher.publish(request)
+        }.getOrDefault(false)
+
+복구할 수 있는 예외와 처리할 경계를 구체적으로 정하는 편이 좋다.
+
+    fun readOptionalConfig(file: File): String? =
+        try {
+            file.readText()
+        } catch (exception: FileNotFoundException) {
+            null
+        }
+
+정리:
+- 성공과 실패 모두에서 최종 값을 만들기: fold
+- 실패 시 대체 값 사용하기: getOrElse / getOrDefault
+- 부가 로깅 후 성공·실패 상태 유지하기: onSuccess / onFailure
+- 실패를 호출자에게 그대로 전달하기: getOrThrow
+- 특정 예외만 처리해야 하기: 평범한 try-catch가 더 명확할 수 있음
+
+
+11. 자주 생기는 실수 체크리스트
+================================
+
+- nullable 값에 !!부터 사용하지 않았는가?
+- 문자열 앞 10자는 slice(0..10)가 아니라 take(10)가 맞지 않은가?
+- 빈 리스트가 정상일 수 있는데 last()를 쓰지 않았는가?
+- ORDER BY DESC인데 커서 조건을 greaterThan으로 쓰지 않았는가?
+- size + 1로 가져온 마지막 감지용 항목을 실제 응답에 포함하지 않았는가?
+- CursorSlice<Diary>를 copy로 CursorSlice<Response>로 바꾸려 하지 않았는가?
+- 확장 함수를 class 내부에 멤버 확장으로 잘못 선언하지 않았는가?
+- DTO의 public 속성을 IDE의 "private 가능" 경고만 보고 private으로 바꾸지 않았는가?
+- 메서드 이름에 화면 렌더링 같은 프론트엔드 구현 세부사항을 넣지 않았는가?
+- Repository의 반환 타입만 보고 size + 1 같은 숨은 계약을 알 수 있는가?
+- 공통화할 실제 중복이 생기기 전에 과도하게 제네릭화하지 않았는가?
+
+
+12. 복습 방법
+=============
+
+작업 중:
+1. 처음 보는 문법을 발견한다.
+2. 이 파일에서 검색한다.
+3. 설명을 읽고 실제 코드 한 줄을 직접 바꿔 본다.
+4. 문서에 없다면 "한 문장 설명 + 실제 예제 + 주의점"만 추가한다.
+
+주기적 복습:
+- 작업 시작 전 최근 배운 항목을 2분간 읽는다.
+- 주 1회 체크리스트만 빠르게 본다.
+- 익숙한 문법은 외우려 하지 말고, 필요할 때 검색할 수 있는지만 확인한다.
+
+기억할 원칙:
+- 짧은 코드보다 의도가 잘 보이는 코드를 우선한다.
+- Kotlin 기능을 쓸 수 있다는 이유만으로 중첩해서 쓰지 않는다.
+- 컴파일러가 null과 타입을 확인하도록 만들고, 강제 변환을 줄인다.
+- DB에서 줄일 수 있는 데이터는 Kotlin 컬렉션으로 가져오기 전에 SQL에서 줄인다.

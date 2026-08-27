@@ -1,0 +1,1 @@
+ALTER TABLE diary RENAME TO diaries;

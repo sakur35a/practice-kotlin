@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Diary 프로젝트로 배우는 Kotlin과 Spring Boot 핵심 문법">
+  <title>Diary Kotlin Guide</title>
+  <style>
+    :root {
+      --bg: #f5f3ed;
+      --paper: #fffdf8;
+      --ink: #252822;
+      --muted: #6d7169;
+      --line: #dedbd1;
+      --brand: #285f52;
+      --brand-soft: #dceae4;
+      --accent: #d27345;
+      --code: #1f2926;
+      --code-ink: #e8f1ec;
+      --shadow: 0 16px 44px rgba(45, 50, 43, .09);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 28px; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 5%, rgba(210, 115, 69, .11), transparent 28rem),
+        var(--bg);
+      font-family: Pretendard, "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.75;
+      word-break: keep-all;
+    }
+
+    button, input { font: inherit; }
+    a { color: var(--brand); }
+    code, pre { font-family: "JetBrains Mono", Consolas, monospace; }
+    code:not(pre code) {
+      padding: .12rem .35rem;
+      border-radius: .35rem;
+      color: #8c3f25;
+      background: #f3e8df;
+      font-size: .9em;
+    }
+
+    .layout { display: grid; grid-template-columns: 300px minmax(0, 860px); gap: 48px; max-width: 1240px; margin: 0 auto; padding: 28px; }
+    .sidebar {
+      position: sticky;
+      top: 28px;
+      height: calc(100vh - 56px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 253, 248, .9);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .sidebar-head { padding: 24px 22px 16px; border-bottom: 1px solid var(--line); }
+    .eyebrow { margin: 0 0 5px; color: var(--accent); font-size: .76rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .sidebar h1 { margin: 0; font-family: Georgia, serif; font-size: 1.45rem; line-height: 1.25; }
+    .sidebar-sub { margin: 8px 0 16px; color: var(--muted); font-size: .86rem; }
+    #search {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+      color: var(--ink); background: #fff; outline: none;
+    }
+    #search:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    nav { padding: 12px; overflow-y: auto; }
+    nav a {
+      display: flex; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 9px;
+      color: var(--muted); text-decoration: none; font-size: .9rem; line-height: 1.4;
+    }
+    nav a span { min-width: 1.7rem; color: #9a9d95; font-size: .72rem; font-weight: 800; }
+    nav a:hover, nav a.active { color: var(--brand); background: var(--brand-soft); }
+    nav a.hidden { display: none; }
+
+    main { min-width: 0; }
+    .hero { padding: 58px 8px 46px; }
+    .hero h2 { max-width: 760px; margin: 8px 0 18px; font-family: Georgia, "Noto Serif KR", serif; font-size: clamp(2.4rem, 7vw, 5.2rem); line-height: 1.02; letter-spacing: -.045em; }
+    .hero p { max-width: 680px; color: var(--muted); font-size: 1.08rem; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+    .hero-tags span { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font-size: .8rem; }
+
+    .chapter { margin-bottom: 30px; padding: 42px 46px; border: 1px solid var(--line); border-radius: 22px; background: var(--paper); box-shadow: var(--shadow); }
+    .chapter-no { color: var(--accent); font-size: .76rem; font-weight: 850; letter-spacing: .12em; }
+    h2 { margin: 5px 0 14px; font-size: clamp(1.65rem, 4vw, 2.25rem); line-height: 1.25; letter-spacing: -.025em; }
+    h3 { margin: 32px 0 8px; font-size: 1.13rem; }
+    p { margin: 10px 0; }
+    ul { padding-left: 1.25rem; }
+    li + li { margin-top: 5px; }
+    pre { margin: 18px 0; padding: 19px 21px; overflow-x: auto; border-radius: 14px; color: var(--code-ink); background: var(--code); font-size: .88rem; line-height: 1.65; tab-size: 4; }
+    .note, .warning, .rule { margin: 20px 0; padding: 16px 18px; border-left: 4px solid var(--brand); border-radius: 0 10px 10px 0; background: var(--brand-soft); }
+    .warning { border-color: var(--accent); background: #f6e7df; }
+    .note strong, .warning strong, .rule strong { display: block; margin-bottom: 3px; }
+    .comparison { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: .92rem; }
+    .comparison th, .comparison td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .comparison th { color: var(--brand); background: #f2f4ef; }
+    .chapter-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 36px; padding-top: 22px; border-top: 1px solid var(--line); }
+    .chapter-nav a { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; text-decoration: none; font-size: .88rem; }
+    .chapter-nav a:last-child { text-align: right; }
+    .chapter-nav a:hover { border-color: var(--brand); background: var(--brand-soft); }
+    .muted { color: var(--muted); }
+    footer { padding: 24px 6px 70px; color: var(--muted); text-align: center; font-size: .84rem; }
+
+    .mobile-bar { display: none; }
+    #top-button {
+      position: fixed; right: 24px; bottom: 24px; width: 44px; height: 44px; border: 0; border-radius: 50%;
+      color: white; background: var(--brand); box-shadow: var(--shadow); cursor: pointer; opacity: 0; pointer-events: none; transition: .2s;
+    }
+    #top-button.show { opacity: 1; pointer-events: auto; }
+
+    @media (max-width: 900px) {
+      .layout { display: block; padding: 72px 16px 20px; }
+      .sidebar { position: fixed; z-index: 20; inset: 62px 12px 12px; height: auto; transform: translateX(-110%); transition: transform .25s ease; }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-bar { position: fixed; z-index: 30; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; height: 58px; padding: 0 16px; border-bottom: 1px solid var(--line); background: rgba(255,253,248,.94); backdrop-filter: blur(12px); }
+      .mobile-bar button { padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+      .hero { padding: 34px 5px; }
+      .chapter { padding: 30px 24px; }
+    }
+    @media (max-width: 520px) {
+      .chapter { padding: 27px 19px; border-radius: 16px; }
+      .chapter-nav { grid-template-columns: 1fr; }
+      .chapter-nav a:last-child { text-align: left; }
+      .comparison { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="mobile-bar">
+    <strong>Diary Kotlin Guide</strong>
+    <button id="menu-button" type="button" aria-expanded="false">목차</button>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <p class="eyebrow">Project field notes</p>
+        <h1>Diary Kotlin Guide</h1>
+        <p class="sidebar-sub">Spring Boot를 만들며 익히는 Kotlin</p>
+        <input id="search" type="search" placeholder="목차 검색" aria-label="목차 검색">
+      </div>
+      <nav id="toc" aria-label="문서 목차">
+        <a href="#start"><span>00</span>읽는 방법</a>
+        <a href="#constructor"><span>01</span>주 생성자와 val/var</a>
+        <a href="#null"><span>02</span>Null 안전성</a>
+        <a href="#function"><span>03</span>함수와 표현식</a>
+        <a href="#model"><span>04</span>data class와 copy</a>
+        <a href="#init"><span>05</span>init, require, check</a>
+        <a href="#companion"><span>06</span>companion object</a>
+        <a href="#collection"><span>07</span>컬렉션 함수</a>
+        <a href="#scope"><span>08</span>스코프 함수</a>
+        <a href="#extension"><span>09</span>확장 함수</a>
+        <a href="#type"><span>10</span>sealed와 value class</a>
+        <a href="#spring"><span>11</span>Spring에서 특히 중요한 점</a>
+        <a href="#domain"><span>12</span>Diary 불변 조건 설계</a>
+        <a href="#test"><span>13</span>테스트 책임 나누기</a>
+        <a href="#logging"><span>14</span>Kotlin 로깅</a>
+        <a href="#kotest"><span>15</span>Kotest와 JUnit 5</a>
+        <a href="#next"><span>16</span>학습 순서와 체크리스트</a>
+      </nav>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Kotlin × Spring Boot</p>
+        <h2>문법을 외우지 말고<br>코드의 책임으로 이해하기</h2>
+        <p>Diary 프로젝트에서 실제로 마주친 코드들을 출발점으로, Kotlin 문법이 웹 애플리케이션 설계를 어떻게 더 명확하게 만드는지 정리한 실전 가이드입니다.</p>
+        <div class="hero-tags"><span>Kotlin 2.x</span><span>Spring Boot</span><span>jOOQ</span><span>JUnit 5</span><span>Mockito</span></div>
+      </header>
+
+      <section class="chapter" id="start">
+        <span class="chapter-no">CHAPTER 00</span>
+        <h2>읽는 방법</h2>
+        <p>처음부터 모두 암기할 필요는 없습니다. 왼쪽 목차에서 지금 작성 중인 코드와 관련된 장을 찾아보고, 예제를 프로젝트 코드에 한 번 적용해 보는 방식이 가장 빠릅니다.</p>
+        <div class="rule"><strong>핵심 기준</strong>문법이 짧다는 것보다, 잘못된 상태를 만들기 어렵고 코드의 책임이 명확한지가 더 중요합니다.</div>
+        <p>각 장 아래에는 이전·다음 이동 링크가 있습니다. 현재 읽는 장은 목차에서 자동으로 표시되고, 목차 검색으로 원하는 주제를 바로 찾을 수 있습니다.</p>
+        <div class="chapter-nav"><span></span><a href="#constructor">다음: 주 생성자와 val/var →</a></div>
+      </section>
+
+      <section class="chapter" id="constructor">
+        <span class="chapter-no">CHAPTER 01</span>
+        <h2>주 생성자와 <code>val</code>/<code>var</code></h2>
+        <p>웹 애플리케이션의 클래스는 대개 Service가 Repository를 필요로 하는 것처럼 다른 객체에 의존합니다. Java에서는 필드와 생성자를 따로 작성하지만, Kotlin은 클래스 이름 옆의 <em>주 생성자(primary constructor)</em>에서 둘을 함께 선언합니다.</p>
+        <p>Kotlin은 생성자 매개변수와 프로퍼티 선언을 한곳에 모을 수 있습니다. Spring의 생성자 주입과 특히 잘 맞습니다.</p>
+        <pre><code>@Service
+class DiaryService(
+    private val diaryRepository: DiaryRepository,
+)</code></pre>
+        <p><code>val</code>은 다른 값을 다시 대입할 수 없고, <code>var</code>는 다시 대입할 수 있습니다. 기본은 <code>val</code>로 시작하세요.</p>
+        <pre><code>val title = "오늘의 일기"
+var editCount = 0
+editCount += 1</code></pre>
+        <div class="warning"><strong>val은 깊은 불변성이 아니다</strong><code>val items = mutableListOf&lt;String&gt;()</code>에서는 items가 가리키는 리스트를 교체할 수 없을 뿐, 리스트 내용은 바꿀 수 있습니다.</div>
+        <p>생성자에 <code>val</code>이나 <code>var</code> 없이 이름만 쓰면 생성 중에만 사용할 수 있는 매개변수이고, 객체의 프로퍼티로 남지 않습니다.</p>
+        <pre><code>class Example(
+    name: String,           // 생성자 매개변수일 뿐
+    val title: String,      // 읽기 전용 프로퍼티
+    var editCount: Int,     // 변경 가능한 프로퍼티
+) {
+    val displayName = "$name: $title"
+}</code></pre>
+        <h3>Spring에서의 습관</h3>
+        <ul><li>의존성은 <code>private val</code> 생성자 주입으로 둡니다.</li><li>필드 주입과 불필요한 <code>lateinit</code>은 피합니다.</li><li>클래스 외부에 공개할 이유가 없다면 접근 제한자를 명시합니다.</li></ul>
+        <div class="chapter-nav"><a href="#start">← 이전: 읽는 방법</a><a href="#null">다음: Null 안전성 →</a></div>
+      </section>
+
+      <section class="chapter" id="null">
+        <span class="chapter-no">CHAPTER 02</span>
+        <h2>Null 가능성을 타입으로 표현하기</h2>
+        <p>Java에서는 메서드 선언만 보고 반환값이 null인지 확신하기 어렵습니다. Kotlin은 “값이 없을 수 있음”을 <code>?</code>로 타입에 기록하고, 처리하지 않으면 컴파일을 막습니다. 런타임의 NPE를 코드 작성 시점의 선택으로 바꾸는 셈입니다.</p>
+        <p><code>String</code>과 <code>String?</code>은 서로 다른 타입입니다. null 가능성을 숨기지 않고 함수 계약에 드러냅니다.</p>
+        <pre><code>val requiredTitle: String = "제목"
+val optionalMemo: String? = null
+
+val length = optionalMemo?.length       // null이면 null
+val text = optionalMemo ?: "메모 없음"  // null이면 기본값</code></pre>
+        <p>Repository 조회 결과를 처리하는 흔한 코드입니다.</p>
+        <pre><code>val diary = diaryRepository.findById(id)
+    ?: throw DiaryNotFoundException(id)</code></pre>
+        <div class="warning"><strong><code>!!</code>는 마지막 수단</strong><code>value!!</code>는 컴파일러의 보호를 해제하고 null이면 NPE를 발생시킵니다. 왜 절대 null이 아닌지 타입이나 흐름으로 증명하는 편이 좋습니다.</div>
+        <h3>HTTP 요청에서 null과 빈 문자열은 다르다</h3>
+        <pre><code>data class SearchRequest(
+    val keyword: String?,
+)
+
+// null: 필드가 없거나 명시적으로 null
+// "": 값은 있지만 비어 있음
+val keyword = request.keyword?.trim()?.takeIf { it.isNotEmpty() }</code></pre>
+        <p>필수 입력은 애초에 non-null 타입으로 선언하고 validation으로 오류를 설명하는 편이 좋습니다. 모든 필드를 습관적으로 nullable로 만들면 이후 코드 전체가 null 처리로 퍼집니다.</p>
+        <h3>유용한 도구</h3>
+        <pre><code>value?.let { use(it) }          // null이 아닐 때만 실행
+value?.takeIf { it.isValid() }  // 조건을 만족하면 값, 아니면 null
+requireNotNull(value)           // 인자가 null이면 예외
+checkNotNull(value)             // 현재 상태가 null이면 예외</code></pre>
+        <div class="chapter-nav"><a href="#constructor">← 이전: 주 생성자</a><a href="#function">다음: 함수와 표현식 →</a></div>
+      </section>
+
+      <section class="chapter" id="function">
+        <span class="chapter-no">CHAPTER 03</span>
+        <h2>함수, 기본 인자와 표현식</h2>
+        <p>Kotlin 함수는 <code>fun 이름(매개변수): 반환타입</code> 순서입니다. Java와 달리 반환 타입이 함수 이름 뒤에 오며, 반환 타입이 명확하면 생략할 수도 있습니다. 공개 API와 Service 함수에서는 계약을 쉽게 읽도록 반환 타입을 적는 편이 좋습니다.</p>
+        <p>본문이 하나의 표현식이면 <code>=</code>로 간결하게 쓸 수 있습니다.</p>
+        <pre><code>@GetMapping
+fun getDiaries(): List&lt;Diary&gt; =
+    diaryService.getDiaries()</code></pre>
+        <p><code>if</code>, <code>when</code>, <code>try</code>, <code>throw</code>도 값을 만드는 표현식입니다.</p>
+        <pre><code>val label = when {
+    title.isBlank() -&gt; "제목 없음"
+    title.length &gt; 100 -&gt; "너무 긴 제목"
+    else -&gt; "정상"
+}</code></pre>
+        <h3>기본 인자와 이름 있는 인자</h3>
+        <pre><code>data class Diary(
+    val id: UUID = newUuidV7(),
+    val title: String,
+    val content: String,
+)
+
+Diary(title = "오늘", content = "Kotlin 공부")</code></pre>
+        <div class="note"><strong>읽기 쉬움이 우선</strong>로직이 길거나 분기와 부수 효과가 많다면 억지로 단일 표현식 함수로 만들지 말고 블록 본문을 사용하세요.</div>
+        <h3><code>Unit</code>과 <code>Nothing</code></h3>
+        <p><code>Unit</code>은 의미 있는 반환값이 없다는 뜻으로 Java의 <code>void</code>와 비슷합니다. <code>Nothing</code>은 함수가 정상적으로 돌아오지 않는다는 뜻으로, 항상 예외를 던지는 함수 등에 사용됩니다.</p>
+        <pre><code>fun logCreated(id: UUID): Unit {
+    logger.info { "created: $id" }
+}
+
+fun notFound(id: UUID): Nothing =
+    throw DiaryNotFoundException(id)</code></pre>
+        <div class="chapter-nav"><a href="#null">← 이전: Null 안전성</a><a href="#model">다음: data class →</a></div>
+      </section>
+
+      <section class="chapter" id="model">
+        <span class="chapter-no">CHAPTER 04</span>
+        <h2><code>data class</code>와 <code>copy</code></h2>
+        <p>요청 DTO나 응답 DTO처럼 “무슨 행동을 하는가”보다 “어떤 값들을 담는가”가 중요한 객체가 많습니다. 이런 값 중심 객체의 반복 코드를 줄이는 선언이 <code>data class</code>입니다.</p>
+        <p><code>data class</code>는 값 중심 객체에 필요한 <code>equals</code>, <code>hashCode</code>, <code>toString</code>, <code>copy</code>, 구조 분해 함수를 생성합니다.</p>
+        <pre><code>data class DiaryResponse(
+    val id: UUID,
+    val title: String,
+)
+
+val renamed = diary.copy(title = "수정된 제목")</code></pre>
+        <p><code>copy()</code>는 기존 객체의 일부 값을 바꾼 새 객체를 만드는 기능입니다. DB 행으로부터 최초 객체를 만드는 복원 함수와는 목적이 다릅니다.</p>
+        <div class="note"><strong>copy는 객체를 수정하지 않는다</strong><code>diary.copy(title = "새 제목")</code>은 기존 diary를 그대로 두고 새 Diary를 반환합니다. 따라서 반환값을 받지 않으면 아무 변화도 일어나지 않습니다.</div>
+        <table class="comparison"><thead><tr><th>동작</th><th>의미</th><th>예시</th></tr></thead><tbody>
+          <tr><td>생성</td><td>새 엔티티 발급</td><td><code>Diary.create(...)</code></td></tr>
+          <tr><td>복원</td><td>DB의 기존 상태 재구성</td><td><code>Diary.restore(...)</code></td></tr>
+          <tr><td>복사</td><td>기존 객체를 기준으로 변경</td><td><code>diary.copy(title = ...)</code></td></tr>
+        </tbody></table>
+        <div class="warning"><strong>JPA 엔티티에서는 주의</strong>자동 생성되는 동등성 비교와 프록시·지연 로딩이 충돌할 수 있습니다. 현재 프로젝트처럼 jOOQ를 사용한다면 이 제약은 상대적으로 적습니다.</div>
+        <p>또한 <code>data class</code>의 동등성은 주 생성자에 선언된 프로퍼티를 기준으로 합니다. ID만 같으면 같은 엔티티인지, 모든 값이 같아야 같은 값인지에 따라 도메인 객체에 적합한지 판단해야 합니다.</p>
+        <div class="chapter-nav"><a href="#function">← 이전: 함수와 표현식</a><a href="#init">다음: init과 검증 →</a></div>
+      </section>
+
+      <section class="chapter" id="init">
+        <span class="chapter-no">CHAPTER 05</span>
+        <h2><code>init</code>, <code>require</code>, <code>check</code></h2>
+        <p>주 생성자에는 실행문을 직접 쓸 수 없습니다. 생성자 매개변수를 받아 계산하거나 검증해야 할 때 <code>init</code> 블록을 사용합니다. 여러 개를 선언하면 코드에 적힌 순서대로 프로퍼티 초기화와 함께 실행됩니다.</p>
+        <p><code>init</code>은 주 생성자 호출 중 실행되는 초기화 블록입니다. 객체가 태어나는 순간 반드시 만족해야 하는 불변 조건을 검사할 수 있습니다.</p>
+        <pre><code>data class Diary(
+    val id: UUID,
+    val title: String,
+) {
+    init {
+        require(id.version() == 7) {
+            "Diary id는 UUID v7이어야 합니다: $id"
+        }
+        require(title.isNotBlank()) {
+            "제목은 비어 있을 수 없습니다"
+        }
+    }
+}</code></pre>
+        <table class="comparison"><thead><tr><th>함수</th><th>의미</th><th>예외</th></tr></thead><tbody>
+          <tr><td><code>require</code></td><td>호출자가 넘긴 인자가 잘못됨</td><td><code>IllegalArgumentException</code></td></tr>
+          <tr><td><code>check</code></td><td>현재 객체·프로그램 상태가 잘못됨</td><td><code>IllegalStateException</code></td></tr>
+          <tr><td><code>error</code></td><td>도달하면 안 되는 상태</td><td><code>IllegalStateException</code></td></tr>
+        </tbody></table>
+        <div class="rule"><strong>좋은 불변 조건</strong>저장 여부나 특정 화면과 무관하게, 이 타입이 존재하는 동안 언제나 참이어야 하는 규칙입니다.</div>
+        <h3>예외를 던지는 검증이 항상 정답은 아니다</h3>
+        <p>프로그래머가 잘못된 객체를 만드는 상황에는 <code>require</code>가 잘 맞습니다. 반면 사용자가 입력을 틀리는 것이 정상적인 흐름이고 여러 오류를 한꺼번에 보여줘야 한다면 요청 DTO의 Bean Validation이나 명시적인 결과 타입이 더 적합합니다.</p>
+        <div class="chapter-nav"><a href="#model">← 이전: data class</a><a href="#companion">다음: companion object →</a></div>
+      </section>
+
+      <section class="chapter" id="companion">
+        <span class="chapter-no">CHAPTER 06</span>
+        <h2><code>companion object</code></h2>
+        <p>어떤 함수는 특정 Diary 한 개의 행동이 아니라 “Diary를 만드는 방법”처럼 클래스 전체와 관련됩니다. 그렇다고 파일 최상위에 두면 소속이 흐려질 수 있습니다. 이때 클래스에 하나만 존재하는 동반 객체에 둘 수 있습니다.</p>
+        <p>클래스 인스턴스 없이 클래스 이름을 통해 접근할 함수와 값을 둡니다. Java의 <code>static</code>과 사용감은 비슷하지만 실제로는 클래스에 연결된 객체입니다.</p>
+        <pre><code>class Diary private constructor(
+    val id: UUID,
+    val title: String,
+) {
+    companion object {
+        const val MAX_TITLE_LENGTH = 100
+
+        fun create(title: String): Diary =
+            Diary(id = newUuidV7(), title = title)
+    }
+}
+
+val diary = Diary.create("오늘")</code></pre>
+        <h3>언제 factory를 만드는가?</h3>
+        <ul><li>생성 과정에 이름을 붙이고 싶을 때</li><li>생성 방식이 여러 개이고 규칙이 다를 때</li><li>생성자를 감추고 올바른 생성 경로만 공개하고 싶을 때</li></ul>
+        <p><code>create</code>는 신규 ID와 시간을 만들고, <code>restore</code>는 저장된 ID와 시간을 유지하는 식으로 의도를 구분할 수 있습니다. 단순한 프로젝트라면 공개 생성자와 <code>init</code>만으로 시작해도 충분합니다.</p>
+        <div class="note"><strong>Spring Bean과는 다른 것</strong><code>companion object</code>는 Kotlin/JVM 차원의 단일 객체이지 Spring이 관리하는 Bean이 아닙니다. Repository나 다른 Bean을 주입받아야 하는 비즈니스 로직은 Service에 두는 편이 자연스럽습니다.</div>
+        <div class="chapter-nav"><a href="#init">← 이전: init과 검증</a><a href="#collection">다음: 컬렉션 함수 →</a></div>
+      </section>
+
+      <section class="chapter" id="collection">
+        <span class="chapter-no">CHAPTER 07</span>
+        <h2>컬렉션을 변환하는 함수들</h2>
+        <p>Java에서 반복문을 돌며 결과 리스트에 직접 추가하던 코드를 Kotlin에서는 “무엇을 원하는지” 나타내는 연산으로 표현할 수 있습니다. 원본 컬렉션은 그대로 두고 새로운 결과를 반환하는 함수가 대부분입니다.</p>
+        <p>Repository 결과를 응답 DTO로 바꾸는 코드에서 특히 자주 사용합니다.</p>
+        <pre><code>val responses = diaries
+    .filter { it.title.isNotBlank() }
+    .map { diary -&gt;
+        DiaryResponse(id = diary.id, title = diary.title)
+    }</code></pre>
+        <table class="comparison"><thead><tr><th>함수</th><th>용도</th></tr></thead><tbody>
+          <tr><td><code>map</code></td><td>각 원소를 다른 값으로 변환</td></tr>
+          <tr><td><code>filter</code></td><td>조건을 만족하는 원소만 선택</td></tr>
+          <tr><td><code>firstOrNull</code></td><td>첫 원소를 찾고 없으면 null</td></tr>
+          <tr><td><code>associateBy</code></td><td>특정 값을 key로 Map 생성</td></tr>
+          <tr><td><code>groupBy</code></td><td>기준값으로 그룹화</td></tr>
+          <tr><td><code>any / all / none</code></td><td>조건의 존재·전체·부재 검사</td></tr>
+        </tbody></table>
+        <h3>일반 컬렉션과 <code>Sequence</code>의 차이</h3>
+        <p><code>List</code>에 여러 연산을 이어 붙이면 각 단계가 전체 원소를 처리하고 중간 컬렉션을 만듭니다.</p>
+        <pre><code>val titles = diaries
+    .filter { it.content.isNotBlank() } // 조건에 맞는 List 생성
+    .map { it.title }                   // 제목만 담은 새 List 생성
+    .take(3)                            // 앞의 3개를 담은 List 생성</code></pre>
+        <p>반면 <code>asSequence()</code>를 호출하면 연산을 즉시 수행하지 않고 작업 순서만 구성합니다. 마지막에 <code>toList()</code>처럼 결과가 필요해질 때, 원소 하나를 <code>filter → map</code> 순서로 처리합니다.</p>
+        <pre><code>val titles = diaries
+    .asSequence()
+    .filter { it.content.isNotBlank() }
+    .map { it.title }
+    .take(3)
+    .toList()</code></pre>
+        <p>이 예에서는 제목 3개를 찾으면 나머지 원소를 확인하지 않아도 되고, 단계마다 중간 List도 만들지 않습니다. 따라서 원소가 많거나 변환 단계가 여러 개거나 <code>take</code>, <code>first</code>처럼 중간에 멈출 수 있는 연산에서는 유리할 수 있습니다.</p>
+        <div class="warning"><strong>그렇다고 Sequence가 항상 빠른 것은 아니다</strong><code>Sequence</code>는 원소마다 iterator를 거치고 지연 연산을 호출하는 비용이 있습니다. 원소가 몇 개뿐이거나 <code>map</code> 한 번만 수행한다면 중간 List를 줄이는 이점보다 이 추가 비용이 더 클 수 있습니다. 우선 일반 컬렉션 함수를 사용하고, 큰 컬렉션의 긴 변환 파이프라인이 실제 병목일 때 측정한 뒤 <code>Sequence</code>를 고려하세요.</div>
+        <div class="note"><strong>간단한 판단 기준</strong><code>diaries.map { ... }</code>처럼 짧으면 List를 그대로 사용합니다. 수천 개 이상의 원소에 여러 변환을 연결하거나 일부 결과만 찾고 바로 멈출 수 있다면 <code>asSequence()</code>를 검토합니다. DB 조회라면 Sequence로 처리하기 전에 SQL의 <code>WHERE</code>와 <code>LIMIT</code>으로 데이터 자체를 줄이는 것이 먼저입니다.</div>
+        <div class="chapter-nav"><a href="#companion">← 이전: companion object</a><a href="#scope">다음: 스코프 함수 →</a></div>
+      </section>
+
+      <section class="chapter" id="scope">
+        <span class="chapter-no">CHAPTER 08</span>
+        <h2>스코프 함수: 적게, 의도가 보이게</h2>
+        <p>스코프 함수는 객체를 잠시 람다의 문맥 안에 넣어 연속 작업을 표현합니다. 새로운 능력을 제공하는 문법은 아니며, 평범한 지역 변수로 쓸 코드를 특정 모양으로 정리하는 도구입니다. 그래서 이름보다 두 질문이 중요합니다: 객체를 <code>it</code>과 <code>this</code> 중 무엇으로 부르는가, 그리고 객체 자체와 계산 결과 중 무엇을 반환하는가?</p>
+        <table class="comparison"><thead><tr><th>함수</th><th>객체 이름</th><th>반환값</th><th>대표 용도</th></tr></thead><tbody>
+          <tr><td><code>let</code></td><td><code>it</code></td><td>람다 결과</td><td>null 처리·변환</td></tr>
+          <tr><td><code>run</code></td><td><code>this</code></td><td>람다 결과</td><td>객체로 계산</td></tr>
+          <tr><td><code>apply</code></td><td><code>this</code></td><td>객체 자체</td><td>객체 설정</td></tr>
+          <tr><td><code>also</code></td><td><code>it</code></td><td>객체 자체</td><td>로깅 등 부가 작업</td></tr>
+          <tr><td><code>with</code></td><td><code>this</code></td><td>람다 결과</td><td>비-null 객체로 여러 작업</td></tr>
+        </tbody></table>
+        <pre><code>return diaryRepository.create(diary)
+    .also { saved -&gt;
+        logger.info { "Diary 저장 완료: ${saved.id}" }
+    }</code></pre>
+        <h3>null 처리에서 자주 보는 <code>let</code></h3>
+        <pre><code>val result = request.keyword?.let { keyword -&gt;
+    diaryRepository.search(keyword)
+} ?: emptyList()</code></pre>
+        <p>keyword가 null이 아니면 검색 결과를, null이면 빈 목록을 만듭니다. 단순히 null 검사만 필요하다면 <code>if (keyword != null)</code>이 더 명확할 수도 있습니다.</p>
+        <div class="warning"><strong>중첩하지 않기</strong><code>it</code>과 <code>this</code>가 누구인지 잠시 생각해야 한다면 일반 지역 변수와 명시적인 코드가 더 좋습니다.</div>
+        <div class="chapter-nav"><a href="#collection">← 이전: 컬렉션 함수</a><a href="#extension">다음: 확장 함수 →</a></div>
+      </section>
+
+      <section class="chapter" id="extension">
+        <span class="chapter-no">CHAPTER 09</span>
+        <h2>확장 함수</h2>
+        <p>DTO 변환 같은 코드를 Controller에 계속 쓰면 HTTP 처리와 객체 조립이 뒤섞입니다. 그렇다고 단순 변환만 하는 클래스를 매번 만들기는 번거롭습니다. 확장 함수는 이런 작고 응집된 변환에 이름을 붙이는 방법입니다.</p>
+        <p>기존 타입을 수정하지 않고 그 타입의 함수처럼 호출할 기능을 정의합니다.</p>
+        <pre><code>fun CreateDiaryRequest.toDiary(): Diary =
+    Diary(
+        title = title.trim(),
+        content = content.trim(),
+    )
+
+val diary = request.toDiary()</code></pre>
+        <p>확장 함수는 실제 멤버를 추가하지 않으며 컴파일 시점의 타입을 기준으로 호출됩니다. DTO → 도메인 → 응답 변환처럼 경계가 분명한 매핑에서 특히 유용합니다.</p>
+        <pre><code>// 실제로는 이 형태의 일반 함수와 비슷하게 컴파일됩니다.
+fun toDiary(request: CreateDiaryRequest): Diary = ...</code></pre>
+        <div class="note"><strong>배치 기준</strong>한 타입에서만 쓰면 그 타입 가까이에, 여러 계층에서 공유하면 의미 있는 별도 파일에 둡니다. 모든 것을 <code>Extensions.kt</code> 하나에 모으지 마세요.</div>
+        <div class="chapter-nav"><a href="#scope">← 이전: 스코프 함수</a><a href="#type">다음: sealed와 value class →</a></div>
+      </section>
+
+      <section class="chapter" id="type">
+        <span class="chapter-no">CHAPTER 10</span>
+        <h2><code>sealed</code> 타입과 <code>value class</code></h2>
+        <p>앞 장들에서는 값 하나가 유효한지를 다뤘습니다. 이제 함수가 가질 수 있는 결과의 종류와, 같은 원시 타입을 서로 다른 개념으로 구별하는 방법을 봅니다. 둘 다 컴파일러가 실수를 미리 잡게 만드는 문법입니다.</p>
+        <h3>결과의 경우의 수: sealed interface</h3>
+        <pre><code>sealed interface CreateDiaryResult {
+    data class Success(val diary: Diary) : CreateDiaryResult
+    data object Duplicate : CreateDiaryResult
+}
+
+val response = when (val result = service.create(request)) {
+    is CreateDiaryResult.Success -&gt; ResponseEntity.ok(result.diary)
+    CreateDiaryResult.Duplicate -&gt; ResponseEntity.status(409).build()
+}</code></pre>
+        <p>가능한 하위 타입이 제한되므로 <code>when</code>에서 빠진 경우를 컴파일러가 알려줍니다.</p>
+        <p>모든 Service 결과를 sealed 타입으로 만들 필요는 없습니다. 성공하거나 예외를 던지는 단순 CRUD에는 과할 수 있고, 성공·중복·승인 대기처럼 호출자가 정상적으로 나눠 처리할 결과가 여러 개일 때 유용합니다.</p>
+        <h3>원시 타입에 의미 부여: value class</h3>
+        <pre><code>@JvmInline
+value class DiaryId(val value: UUID) {
+    init {
+        require(value.version() == 7)
+    }
+}</code></pre>
+        <p><code>UserId</code>와 <code>DiaryId</code>가 모두 UUID여도 서로 섞이지 않습니다. 다만 Jackson과 jOOQ 경계에는 변환 설정이 필요할 수 있으므로 복잡도를 감수할 가치가 있을 때 도입합니다.</p>
+        <div class="chapter-nav"><a href="#extension">← 이전: 확장 함수</a><a href="#spring">다음: Spring 주의점 →</a></div>
+      </section>
+
+      <section class="chapter" id="spring">
+        <span class="chapter-no">CHAPTER 11</span>
+        <h2>Spring Boot에서 특히 중요한 Kotlin 포인트</h2>
+        <p>Kotlin 모델을 그대로 HTTP 요청, 비즈니스 객체, DB 데이터에 모두 사용하면 처음에는 편하지만 각 계층의 요구가 달라질수록 변경이 서로 번집니다. Spring 문법보다 먼저 경계별 모델의 역할을 구분하는 것이 중요합니다.</p>
+        <h3>요청 DTO와 도메인 객체 분리</h3>
+        <pre><code>data class CreateDiaryRequest(
+    val title: String,
+    val content: String,
+)
+
+@PostMapping
+fun create(@RequestBody request: CreateDiaryRequest) =
+    diaryService.createDiary(request.toDiary())</code></pre>
+        <p>클라이언트가 <code>id</code>와 <code>createdAt</code>을 정하지 못하게 하고, API 계약과 내부 모델이 함께 흔들리는 것을 막습니다.</p>
+        <h3>Kotlin 클래스는 기본적으로 final</h3>
+        <p>Spring이 프록시를 만들 클래스는 열려 있어야 합니다. 이 프로젝트의 <code>kotlin("plugin.spring")</code> 플러그인은 Spring 애노테이션이 붙은 클래스를 컴파일할 때 자동으로 열어줍니다.</p>
+        <h3>Jackson과 기본값</h3>
+        <p>생성자 기본값은 Kotlin 코드에서 인자를 생략할 때 편리하지만, API에서 클라이언트가 값을 보내지 않아도 된다는 계약이 될 수 있습니다. 서버가 정해야 하는 <code>id</code>와 <code>createdAt</code>은 요청 DTO에서 아예 제외하는 편이 의도가 더 분명합니다.</p>
+        <h3>Bean Validation과 도메인 검증</h3>
+        <table class="comparison"><thead><tr><th>위치</th><th>책임</th></tr></thead><tbody>
+          <tr><td>요청 DTO + Bean Validation</td><td>HTTP 입력 형식과 친절한 오류 응답</td></tr>
+          <tr><td>도메인 <code>init</code></td><td>어떤 경로에서도 깨지면 안 되는 불변 조건</td></tr>
+          <tr><td>DB constraint</td><td>애플리케이션을 우회한 데이터까지 방어</td></tr>
+        </tbody></table>
+        <div class="chapter-nav"><a href="#type">← 이전: sealed와 value class</a><a href="#domain">다음: Diary 설계 →</a></div>
+      </section>
+
+      <section class="chapter" id="domain">
+        <span class="chapter-no">CHAPTER 12</span>
+        <h2>Diary의 UUID v7 규칙은 어디에 둘까?</h2>
+        <p>검증 코드를 어디에 둘지는 문법 문제가 아니라 규칙의 범위 문제입니다. Controller에 두면 다른 호출 경로가 우회할 수 있고, Repository에 두면 저장 전까지 잘못된 객체가 존재할 수 있습니다. 먼저 그 규칙이 언제 참이어야 하는지 문장으로 적어봅니다.</p>
+        <p>“모든 Diary ID는 언제나 UUID v7이다”가 규칙이면 객체 생성 시 검증합니다.</p>
+        <pre><code>data class Diary(
+    val id: UUID = Generators.timeBasedEpochGenerator().generate(),
+    val title: String,
+    val content: String,
+    val createdAt: Instant = Instant.now(),
+) {
+    init {
+        require(id.version() == 7) {
+            "Diary id는 UUID v7이어야 합니다: $id"
+        }
+    }
+}</code></pre>
+        <p>Repository에서만 검사하면 잘못된 Diary가 Service 내부에는 존재할 수 있습니다. Repository 검증은 중복 ID, DB 컬럼 제한, 동시성처럼 저장 시점에만 알 수 있는 규칙에 적합합니다.</p>
+        <div class="rule"><strong>판단 질문</strong>DB에 저장하지 않는 Diary도 UUID v7이어야 하는가? “예”라면 객체 규칙, “새로 저장할 때만”이라면 생성 정책 또는 저장 경계의 규칙입니다.</div>
+        <p>현재 단계에서는 <code>init</code> 검증과 요청 DTO 분리가 단순하고 견고합니다. 생성 방식이 늘어난 뒤에 <code>create</code>/<code>restore</code> factory를 고려해도 늦지 않습니다.</p>
+        <div class="chapter-nav"><a href="#spring">← 이전: Spring 주의점</a><a href="#test">다음: 테스트 책임 →</a></div>
+      </section>
+
+      <section class="chapter" id="test">
+        <span class="chapter-no">CHAPTER 13</span>
+        <h2>테스트는 책임의 소유자 곁에</h2>
+        <p>테스트 파일은 “누가 이 규칙을 보장하는가?”를 기준으로 찾으면 됩니다. 객체 생성자가 UUID를 거부한다면 그 행동의 소유자는 Diary이고, Service는 이미 유효한 Diary를 받아 저장 흐름을 조율합니다.</p>
+        <p>UUID 불변 조건은 <code>DiaryServiceTest</code>가 아니라 <code>DiaryTest</code>에서 검증합니다.</p>
+        <pre><code>class DiaryTest {
+    @Test
+    fun `UUID v7이 아니면 생성할 수 없다`() {
+        assertFailsWith&lt;IllegalArgumentException&gt; {
+            Diary(
+                id = UUID.randomUUID(), // v4
+                title = "제목",
+                content = "내용",
+            )
+        }
+    }
+
+    @Test
+    fun `기본 ID는 UUID v7으로 생성된다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        assertEquals(7, diary.id.version())
+    }
+}</code></pre>
+        <table class="comparison"><thead><tr><th>테스트</th><th>확인할 책임</th></tr></thead><tbody>
+          <tr><td><code>DiaryTest</code></td><td>생성 규칙과 불변 조건</td></tr>
+          <tr><td><code>DiaryServiceTest</code></td><td>업무 흐름과 Repository 협력</td></tr>
+          <tr><td><code>DiaryControllerTest</code></td><td>HTTP, JSON, 상태 코드와 validation</td></tr>
+          <tr><td><code>DiaryRepositoryTest</code></td><td>SQL 매핑, 저장과 조회</td></tr>
+        </tbody></table>
+        <div class="note"><strong>객체 테스트가 필요한 때</strong>단순 DTO의 프로퍼티나 Kotlin이 생성한 <code>equals</code>를 다시 테스트하지 않습니다. 객체가 직접 가진 규칙과 동작이 있을 때 테스트합니다.</div>
+        <p>테스트 이름도 구현 세부사항보다 보장하는 규칙을 문장으로 적는 편이 좋습니다. 예를 들어 “<code>require가 IllegalArgumentException을 던진다</code>”보다 “<code>UUID v7이 아니면 Diary를 생성할 수 없다</code>”가 리팩터링 후에도 의미가 유지됩니다.</p>
+        <div class="chapter-nav"><a href="#domain">← 이전: Diary 설계</a><a href="#logging">다음: Kotlin 로깅 →</a></div>
+      </section>
+
+      <section class="chapter" id="logging">
+        <span class="chapter-no">CHAPTER 14</span>
+        <h2>Kotlin 로깅과 <code>@Slf4j</code></h2>
+        <p>애플리케이션 코드는 실행 중 상태를 관찰할 수 있어야 하지만, <code>println</code>은 레벨·형식·출력 위치를 운영 환경에 맞게 제어하기 어렵습니다. 로깅 facade를 사용하면 코드는 같은 API를 호출하면서 환경별 설정으로 출력 방식을 바꿀 수 있습니다.</p>
+        <pre><code>private val logger = KotlinLogging.logger {}
+
+@Service
+class DiaryService(...) {
+    fun createDiary(diary: Diary) {
+        logger.info { "Diary 생성: ${diary.id}" }
+    }
+}</code></pre>
+        <p>Java의 Lombok <code>@Slf4j</code>는 어노테이션이 간단한 것이 아니라 컴파일 과정에서 Logger 필드를 생성해 숨긴 것입니다. Kotlin Logging은 일반 Kotlin 코드로 로거를 명시하며 람다 메시지는 해당 로그 레벨이 비활성화되면 문자열 계산을 피할 수 있습니다.</p>
+        <table class="comparison"><thead><tr><th>레벨</th><th>대표 용도</th></tr></thead><tbody>
+          <tr><td><code>debug</code></td><td>개발·진단에 필요한 상세 흐름</td></tr>
+          <tr><td><code>info</code></td><td>중요한 정상 업무 이벤트</td></tr>
+          <tr><td><code>warn</code></td><td>처리는 가능하지만 살펴볼 비정상 상황</td></tr>
+          <tr><td><code>error</code></td><td>요청 실패나 운영 조치가 필요한 오류</td></tr>
+        </tbody></table>
+        <div class="warning"><strong>민감 정보 주의</strong>Diary의 content 전체, 인증 정보, 개인 정보를 로그에 남기지 마세요. 식별자와 처리 결과처럼 운영에 필요한 최소 정보만 남깁니다.</div>
+        <div class="chapter-nav"><a href="#test">← 이전: 테스트 책임</a><a href="#kotest">다음: Kotest와 JUnit →</a></div>
+      </section>
+
+      <section class="chapter" id="kotest">
+        <span class="chapter-no">CHAPTER 15</span>
+        <h2>Kotest와 JUnit 5 성능 이해</h2>
+        <p>테스트 실행 창에 표시되는 총 시간은 테스트 함수 본문의 시간과 같지 않습니다. 소스 컴파일, Gradle daemon, 별도 테스트 JVM, 테스트 탐색을 거친 뒤에야 Mockito 테스트 본문이 실행됩니다. 수 밀리초짜리 테스트 하나에서는 이 고정비가 거의 전부로 보일 수 있습니다.</p>
+        <p>Kotest와 JUnit Jupiter는 모두 JUnit Platform에 연결되는 별도의 TestEngine입니다. 짧은 mock 테스트에서는 테스트 본문보다 Gradle/JVM 기동, Kotlin 컴파일, 엔진 초기화와 테스트 탐색 비용이 더 크게 보일 수 있습니다.</p>
+        <pre><code>Gradle / IntelliJ
+       ↓
+JUnit Platform
+   ├─ JupiterTestEngine
+   └─ KotestTestEngine</code></pre>
+        <p>Kotest 5.x에는 extension classpath 탐색과 source reference 계산 등 시작 비용에 영향을 줄 요소가 있었습니다. isolation을 <code>InstancePerTest</code>로 바꾼 경우 spec 초기화가 반복될 수도 있습니다. 하지만 10초 전체를 Kotest 탓으로 단정하려면 구간을 측정해야 합니다.</p>
+        <pre><code>.\gradlew test --tests "*DiaryServiceTest" --info</code></pre>
+        <ul><li><code>compileTestKotlin</code>이 길면 컴파일·cold cache 문제입니다.</li><li>Test Executor 전이 길면 JVM·classpath·탐색 비용입니다.</li><li>테스트 구간이 길면 extension, isolation 또는 테스트 본문을 봅니다.</li></ul>
+        <p>현재처럼 Mockito 기반의 짧은 단위 테스트이고 Kotest의 property testing이나 DSL을 활용하지 않는다면 JUnit 5를 유지하는 것이 실용적입니다.</p>
+        <div class="note"><strong>공정하게 비교하기</strong>둘 다 같은 실행기(Gradle 또는 IntelliJ)로 실행하고 첫 실행끼리, warm cache 실행끼리 비교하세요. 테스트 프레임워크를 바꾸면서 의존성이나 Spring 애노테이션까지 달라지면 프레임워크 자체의 차이를 측정한 것이 아닙니다.</div>
+        <div class="chapter-nav"><a href="#logging">← 이전: Kotlin 로깅</a><a href="#next">다음: 학습 체크리스트 →</a></div>
+      </section>
+
+      <section class="chapter" id="next">
+        <span class="chapter-no">CHAPTER 16</span>
+        <h2>추천 학습 순서와 체크리스트</h2>
+        <p>아래 순서는 문법 난이도순이 아니라 Diary 프로젝트에서 효과를 바로 확인하기 좋은 순서입니다. 한 항목씩 실제 코드를 바꾸고 테스트가 설명하는 책임도 함께 정리해 보세요.</p>
+        <ol>
+          <li>생성자 주입과 <code>val</code>을 기본 습관으로 만듭니다.</li>
+          <li><code>String?</code>, <code>?.</code>, <code>?:</code>로 null 흐름을 명확히 합니다.</li>
+          <li>요청 DTO와 도메인 객체를 분리합니다.</li>
+          <li><code>init</code>과 <code>require</code>로 Diary 불변 조건을 표현합니다.</li>
+          <li><code>map</code>, <code>filter</code>, <code>firstOrNull</code>로 조회 결과를 변환합니다.</li>
+          <li>DTO 변환을 작은 함수나 확장 함수로 분리합니다.</li>
+          <li>경우의 수가 늘 때 sealed 타입을 고려합니다.</li>
+          <li>타입 혼동이 실제 문제가 될 때 value class를 도입합니다.</li>
+        </ol>
+        <div class="rule"><strong>다음 실습</strong><code>CreateDiaryRequest</code>를 만들고, <code>toDiary()</code> 변환을 추가하고, <code>DiaryTest</code>에서 UUID v7과 빈 제목 규칙을 테스트해 보세요.</div>
+        <h3>코드 리뷰 때 스스로 물어볼 질문</h3>
+        <ul><li>이 값은 정말 null이어야 하는가?</li><li><code>var</code> 대신 <code>val</code>로 만들 수 있는가?</li><li>이 검증은 HTTP, 도메인, 저장소 중 누구의 책임인가?</li><li>잘못된 상태가 객체로 만들어질 수 있는가?</li><li>스코프 함수가 코드를 짧게만 했는가, 의도도 분명하게 했는가?</li><li>테스트가 구현이 아니라 책임과 행동을 설명하는가?</li></ul>
+        <div class="chapter-nav"><a href="#kotest">← 이전: Kotest와 JUnit</a><a href="#start">처음으로 돌아가기 ↑</a></div>
+      </section>
+
+      <footer>Diary 프로젝트 학습 노트 · 브라우저에서 바로 열 수 있는 단일 문서</footer>
+    </main>
+  </div>
+
+  <button id="top-button" type="button" aria-label="맨 위로 이동">↑</button>
+  <script>
+    const sections = [...document.querySelectorAll('.chapter')];
+    const links = [...document.querySelectorAll('#toc a')];
+    const sidebar = document.querySelector('#sidebar');
+    const menuButton = document.querySelector('#menu-button');
+    const topButton = document.querySelector('#top-button');
+    const search = document.querySelector('#search');
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      links.forEach(link => link.classList.toggle('active', link.hash === `#${visible.target.id}`));
+    }, { rootMargin: '-15% 0px -65% 0px', threshold: [0, .2, .5] });
+    sections.forEach(section => observer.observe(section));
+
+    menuButton.addEventListener('click', () => {
+      const open = sidebar.classList.toggle('open');
+      menuButton.setAttribute('aria-expanded', String(open));
+      menuButton.textContent = open ? '닫기' : '목차';
+    });
+    links.forEach(link => link.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+      menuButton.textContent = '목차';
+    }));
+
+    search.addEventListener('input', () => {
+      const query = search.value.trim().toLocaleLowerCase('ko');
+      links.forEach(link => link.classList.toggle('hidden', !link.textContent.toLocaleLowerCase('ko').includes(query)));
+    });
+
+    window.addEventListener('scroll', () => topButton.classList.toggle('show', window.scrollY > 700), { passive: true });
+    topButton.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  </script>
+</body>
+</html>

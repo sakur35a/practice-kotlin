@@ -1,0 +1,25 @@
+추가 스택 제안
+
+1. Detekt
+Kotlin 의미 단위의 정적 분석을 CI에 추가하는 것을 권장한다. 현재 ktlint는 포맷을 잘 관리하지만,
+복잡도·잠재 버그·불필요한 할당 같은 품질 규칙까지 다루지는 않는다. 처음에는 기본 규칙과
+complexity 임계치만 적용하고, 기존 코드에 대한 baseline을 만든 뒤 점진적으로 강화하는 편이 안전하다.
+
+2. Kover
+서비스, 저장소, 페이지네이션의 회귀 방지를 위해 Kotlin 친화적인 커버리지 리포트와 최소 커버리지
+검증을 추가할 수 있다. 단순 라인 비율보다 분기 커버리지 기준을 함께 두는 것을 권장한다.
+
+3. Micrometer + Actuator
+Caffeine의 recordStats 설정을 실제로 활용하려면 Actuator/Micrometer로 캐시 적중률, 제거 횟수,
+DB 커넥션 풀과 HTTP 지연 시간을 노출하는 것이 좋다. 관측 결과 없이 캐시 크기와 TTL을 조정하면
+메모리 사용량과 데이터 신선도 사이의 균형을 판단하기 어렵다.
+
+4. JMH 또는 kotlinx-benchmark
+문자열 미리보기나 목록 변환처럼 미세 최적화가 필요한 시점에는 추측 대신 벤치마크를 사용한다.
+현재 규모에서는 운영 지표가 우선이며, 성능 병목이 확인된 코드에만 마이크로벤치마크를 추가하는
+것이 유지보수 비용 면에서 적절하다.
+
+5. Gradle configuration cache와 version catalog
+configuration cache로 로컬·CI 빌드 준비 시간을 줄이고, libs.versions.toml로 플러그인 및 의존성
+버전을 한곳에서 관리하는 것을 권장한다. 도입 전 모든 플러그인의 configuration cache 호환 여부를
+CI에서 확인해야 한다.
