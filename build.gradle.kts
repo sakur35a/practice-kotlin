@@ -1,3 +1,5 @@
+import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
+
 buildscript {
     dependencies {
         classpath("org.flywaydb:flyway-database-postgresql:13.0.0")
@@ -16,7 +18,9 @@ plugins {
 }
 
 group = "com.example"
-version = "0.0.1-SNAPSHOT"
+version = providers.gradleProperty("appVersion")
+    .orElse("0.0.1-SNAPSHOT")
+    .get()
 description = "diary"
 
 java {
@@ -136,4 +140,20 @@ tasks.named("flywayMigrate") {
 tasks.named("jooqCodegen") {
     dependsOn(tasks.named("flywayMigrate"))
     inputs.files(migrationFiles)
+}
+
+tasks.named<BootBuildImage>("bootBuildImage") {
+    val imageRepository = "ghcr.io/sakur35a/practice-kotlin"
+
+    imageName.set("$imageRepository:${project.version}")
+    tags.set(listOf("$imageRepository:latest"))
+    createdDate.set("now")
+    imagePlatform.set("linux/amd64")
+
+    docker {
+        publishRegistry {
+            username.set(providers.environmentVariable("GHCR_USERNAME"))
+            password.set(providers.environmentVariable("GHCR_TOKEN"))
+        }
+    }
 }
