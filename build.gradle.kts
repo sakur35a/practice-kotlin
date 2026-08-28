@@ -18,9 +18,11 @@ plugins {
 }
 
 group = "com.example"
-version = providers.gradleProperty("appVersion")
-    .orElse("0.0.1-SNAPSHOT")
-    .get()
+version =
+    providers
+        .gradleProperty("appVersion")
+        .orElse("0.0.1-SNAPSHOT")
+        .get()
 description = "diary"
 
 java {

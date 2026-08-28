@@ -16,8 +16,31 @@ permissions:
   packages: write
 
 jobs:
-  publish:
+  check:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run checks
+        run: ./gradlew check
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -41,7 +64,17 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Determine image name
+        id: image
+        run: echo "name=ghcr.io/sakur35a/practice-kotlin:${{ steps.version.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and publish image
         env:
@@ -52,3 +85,54 @@ jobs:
             -PappVersion="${{ steps.version.outputs.version }}" \
             --imagePlatform=linux/amd64 \
             --publishImage
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure SSH
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_SSH_KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
+          OCI_SSH_PRIVATE_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          : "${OCI_HOST:?OCI_HOST is required}"
+          : "${OCI_USER:?OCI_USER is required}"
+          : "${OCI_SSH_PRIVATE_KEY:?OCI_SSH_PRIVATE_KEY is required}"
+          : "${OCI_SSH_KNOWN_HOSTS:?OCI_SSH_KNOWN_HOSTS is required}"
+
+          install -d -m 700 "$HOME/.ssh"
+          install -m 600 /dev/null "$HOME/.ssh/id_oci"
+          printf '%s\n' "$OCI_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_oci"
+          printf '%s\n' "$OCI_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+      - name: Upload deployment scripts
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          scp -i "$HOME/.ssh/id_oci" \
+            deploy/start.sh deploy/deploy.sh \
+            "$OCI_USER@$OCI_HOST:/home/$OCI_USER/"
+
+      - name: Deploy image
+        env:
+          IMAGE: ${{ needs.publish.outputs.image }}
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+        run: |
+          ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$OCI_HOST" \
+            "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
+
+      - name: Verify public API
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 \
+            --max-time 15 \
+            https://diary-6c6.pages.dev/api/diary \
+            >/dev/null
