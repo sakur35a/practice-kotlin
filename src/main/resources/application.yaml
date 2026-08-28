@@ -5,6 +5,6 @@ spring:
     type: caffeine
     cache-names: diarySlices
     caffeine:
-      spec: maximumSize=1000,expireAfterWrite=5m,recordStats
+      spec: maximumSize=1000,recordStats
   profiles:
     default: local
