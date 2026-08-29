@@ -25,13 +25,27 @@ class DiaryRepository(
         val startedAt = System.nanoTime()
         val condition = query.cursorId?.let(DIARIES.ID::lessThan) ?: noCondition()
 
-        val diaries =
-            dsl
-                .selectFrom(DIARIES)
-                .where(condition)
-                .orderBy(DIARIES.ID.desc())
-                .limit(query.size + 1)
-                .fetch(::toDiary)
+        val connectionStartedAt = System.nanoTime()
+        val (diaries, connectionMs, sqlMs) =
+            dsl.connectionResult { connection ->
+                val sqlStartedAt = System.nanoTime()
+                val diaries =
+                    dsl
+                        .configuration()
+                        .derive(connection)
+                        .dsl()
+                        .selectFrom(DIARIES)
+                        .where(condition)
+                        .orderBy(DIARIES.ID.desc())
+                        .limit(query.size + 1)
+                        .fetch(::toDiary)
+
+                Triple(
+                    diaries,
+                    (sqlStartedAt - connectionStartedAt) / 1_000_000,
+                    (System.nanoTime() - sqlStartedAt) / 1_000_000,
+                )
+            }
 
         val hasNext = diaries.size > query.size
         val items = if (hasNext) diaries.dropLast(1) else diaries
@@ -44,7 +58,8 @@ class DiaryRepository(
             )
 
         logger.info {
-            "layer=repository operation=findDiarySlice elapsedMs=${(System.nanoTime() - startedAt) / 1_000_000} items=${slice.items.size}"
+            "layer=repository operation=findDiarySlice elapsedMs=${(System.nanoTime() - startedAt) / 1_000_000} " +
+                "connectionMs=$connectionMs sqlMs=$sqlMs items=${slice.items.size}"
         }
         return slice
     }
