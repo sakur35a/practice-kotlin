@@ -13,7 +13,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7"
 
     id("org.flywaydb.flyway") version "13.0.0"
-    id("org.jooq.jooq-codegen-gradle") version "3.20.9"
+    id("org.jooq.jooq-codegen-gradle") version "3.21.5"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
@@ -120,6 +120,7 @@ jooq {
             generate {
                 isPojos = false
                 isDaos = false
+                isWhereMethodOverrides = false
             }
 
             target {
