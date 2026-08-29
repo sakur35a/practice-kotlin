@@ -2,9 +2,6 @@ spring:
   application:
     name: diary
   cache:
-    type: caffeine
-    cache-names: diarySlices
-    caffeine:
-      spec: maximumSize=1000,recordStats
+    type: none
   profiles:
     default: local

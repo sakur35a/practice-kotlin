@@ -20,13 +20,25 @@ class DiaryService(
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = [DIARY_SLICES_CACHE], sync = true)
-    fun findDiarySlice(cursorQuery: CursorQuery): CursorSlice<Diary> = diaryRepository.findDiarySlice(cursorQuery)
+    fun findDiarySlice(cursorQuery: CursorQuery): CursorSlice<Diary> {
+        val startedAt = System.nanoTime()
+        val slice = diaryRepository.findDiarySlice(cursorQuery)
+
+        logger.info {
+            "layer=service operation=findDiarySlice elapsedMs=${(System.nanoTime() - startedAt) / 1_000_000} items=${slice.items.size}"
+        }
+        return slice
+    }
 
     @Transactional
     @CacheEvict(cacheNames = [DIARY_SLICES_CACHE], allEntries = true)
     fun createDiary(diary: Diary): Diary {
+        val startedAt = System.nanoTime()
         diaryRepository.createDiary(diary)
-        logger.info { "Diary created: id=${diary.id}" }
+
+        logger.info {
+            "layer=service operation=createDiary elapsedMs=${(System.nanoTime() - startedAt) / 1_000_000} id=${diary.id}"
+        }
         return diary
     }
 }
