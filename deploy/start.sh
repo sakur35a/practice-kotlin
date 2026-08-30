@@ -10,5 +10,5 @@ podman run -d \
   -p 127.0.0.1:8080:8080 \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e 'JAVA_TOOL_OPTIONS=-XX:ReservedCodeCacheSize=64M -Xss512k -Xlog:gc,safepoint' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:ReservedCodeCacheSize=64M -XX:MetaspaceSize=64M -Xss512k -Xlog:gc,safepoint' \
   "$IMAGE"
