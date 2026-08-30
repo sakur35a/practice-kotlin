@@ -6,6 +6,7 @@ import com.example.jooq.generated.tables.Diaries.DIARIES
 import com.example.jooq.generated.tables.records.DiariesRecord
 import org.jooq.DSLContext
 import org.jooq.impl.DSL.noCondition
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Repository
 import java.time.Instant
 
@@ -13,12 +14,15 @@ import java.time.Instant
 class DiaryRepository(
     private val dsl: DSLContext,
 ) {
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     fun findAll(): List<Diary> =
         dsl
             .selectFrom(DIARIES)
             .fetch(::toDiary)
 
     fun findDiarySlice(query: CursorQuery): CursorSlice<Diary> {
+        val startedAt = System.nanoTime()
         val condition = query.cursorId?.let(DIARIES.ID::lessThan) ?: noCondition()
 
         val diaries =
@@ -31,6 +35,12 @@ class DiaryRepository(
 
         val hasNext = diaries.size > query.size
         val items = if (hasNext) diaries.dropLast(1) else diaries
+
+        logger.info(
+            "layer=repository operation=findDiarySlice elapsedMs={} items={}",
+            (System.nanoTime() - startedAt) / 1_000_000,
+            items.size,
+        )
 
         return CursorSlice(
             items = items,
