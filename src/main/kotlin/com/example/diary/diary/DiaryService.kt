@@ -9,10 +9,8 @@ import org.springframework.transaction.annotation.Transactional
 class DiaryService(
     private val diaryRepository: DiaryRepository,
 ) {
-    @Transactional(readOnly = true)
     fun findAll(): List<Diary> = diaryRepository.findAll()
 
-    @Transactional(readOnly = true)
     fun findDiarySlice(cursorQuery: CursorQuery): CursorSlice<Diary> = diaryRepository.findDiarySlice(cursorQuery)
 
     @Transactional
