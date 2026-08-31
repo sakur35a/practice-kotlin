@@ -15,7 +15,8 @@ podman run -d \
   --memory=512m \
   -p 127.0.0.1:18080:8080 \
   -e BPL_JVM_THREAD_COUNT=50 \
+  -e BPL_JVM_CLASS_ADJUSTMENT=125% \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e 'JAVA_TOOL_OPTIONS=-XX:ReservedCodeCacheSize=128M -XX:MetaspaceSize=64M -Xss512k -Xlog:gc,safepoint' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:ReservedCodeCacheSize=128M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info,safepoint' \
   --env-file "$ENV_FILE" \
   "$IMAGE"
