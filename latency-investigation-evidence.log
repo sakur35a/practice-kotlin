@@ -1,0 +1,106 @@
+LATENCY INVESTIGATION EVIDENCE
+Captured: 2026-08-30
+Repository: /Users/sakur35a/IdeaProjects/practice-kotlin
+
+=== BEFORE: first cold requests (previous production containers) ===
+2026-08-29T14:10:01.212Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=7379 items=20
+2026-08-29T14:10:01.216Z  INFO 1 --- [diary] [nio-8080-exec-1] com.example.diary.diary.DiaryService     : layer=service operation=findDiarySlice elapsedMs=7389 items=20
+2026-08-29T14:10:01.223Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=7608 items=20
+2026-08-29T14:18:41.210Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=8981 connectionMs=67 sqlMs=8494 items=20
+2026-08-29T14:18:41.217Z  INFO 1 --- [diary] [nio-8080-exec-1] com.example.diary.diary.DiaryService     : layer=service operation=findDiarySlice elapsedMs=8988 items=20
+2026-08-29T14:18:41.308Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=9225 items=20
+2026-08-29T14:18:41.211Z  INFO 1 --- [diary] [nio-8080-exec-2] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=1086 connectionMs=0 sqlMs=881 items=20
+2026-08-29T14:18:41.228Z  INFO 1 --- [diary] [nio-8080-exec-2] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=1109 items=20
+2026-08-29T14:18:43.760Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 connectionMs=0 sqlMs=6 items=20
+2026-08-29T14:18:43.764Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=14 items=20
+
+=== BEFORE: long-idle request ===
+2026-08-29T14:42:31.621Z  INFO 1 --- [diary] [nio-8080-exec-2] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=179 connectionMs=0 sqlMs=179 items=20
+2026-08-29T14:42:31.623Z  INFO 1 --- [diary] [nio-8080-exec-2] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=184 items=20
+2026-08-30T02:43:41.371Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=357 connectionMs=9 sqlMs=338 items=20
+2026-08-30T02:43:41.388Z  INFO 1 --- [diary] [nio-8080-exec-4] com.example.diary.diary.DiaryService     : layer=service operation=findDiarySlice elapsedMs=383 items=20
+2026-08-30T02:43:41.409Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryController    : layer=controller operation=getDiaryPreviews elapsedMs=591 items=20
+
+=== BEFORE: Metadata GC Threshold events from the v0.0.9 container ===
+[35.975s][info][gc       ] GC(55) Pause Full (Metadata GC Threshold) 25M->25M(65M) 398.701ms
+[36.396s][info][gc       ] GC(56) Pause Full (Metadata GC Threshold) 26M->25M(65M) 309.894ms
+[36.772s][info][gc       ] GC(57) Pause Full (Metadata GC Threshold) 26M->25M(65M) 211.180ms
+[37.010s][info][gc       ] GC(58) Pause Full (Metadata GC Threshold) 26M->25M(65M) 137.758ms
+[37.184s][info][gc       ] GC(59) Pause Full (Metadata GC Threshold) 25M->25M(65M) 172.486ms
+[37.406s][info][gc       ] GC(60) Pause Full (Metadata GC Threshold) 26M->25M(65M) 136.098ms
+[37.591s][info][gc       ] GC(61) Pause Full (Metadata GC Threshold) 25M->25M(65M) 183.655ms
+[37.868s][info][gc       ] GC(62) Pause Full (Metadata GC Threshold) 30M->25M(65M) 173.188ms
+[37.989s][info][gc       ] GC(63) Pause Full (Metadata GC Threshold) 25M->25M(65M) 119.527ms
+[41.500s][info][gc       ] GC(64) Pause Full (Metadata GC Threshold) 27M->25M(65M) 119.895ms
+[41.764s][info][gc       ] GC(65) Pause Full (Metadata GC Threshold) 26M->23M(65M) 183.086ms
+[41.994s][info][gc       ] GC(66) Pause Full (Metadata GC Threshold) 24M->23M(65M) 127.605ms
+[42.375s][info][gc       ] GC(67) Pause Full (Metadata GC Threshold) 24M->23M(65M) 195.743ms
+[42.708s][info][gc       ] GC(68) Pause Full (Metadata GC Threshold) 25M->23M(65M) 135.431ms
+[42.890s][info][gc       ] GC(69) Pause Full (Metadata GC Threshold) 24M->23M(65M) 129.003ms
+[43.590s][info][gc       ] GC(70) Pause Full (Metadata GC Threshold) 28M->24M(65M) 204.372ms
+[44.105s][info][gc       ] GC(71) Pause Full (Metadata GC Threshold) 27M->25M(65M) 138.269ms
+[44.501s][info][gc       ] GC(72) Pause Full (Metadata GC Threshold) 26M->25M(65M) 135.289ms
+[44.994s][info][gc       ] GC(73) Pause Full (Metadata GC Threshold) 28M->26M(65M) 214.804ms
+metadata_full_gc_count=19
+metadata_full_gc_pause_total=3425.984ms
+metadata_full_gc_pause_max=398.701ms
+
+=== AFTER: v0.0.11 selected raw container logs ===
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx329297K -XX:MaxMetaspaceSize=93614K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 14114, Headroom: 0%)
+Picked up JAVA_TOOL_OPTIONS: -XX:ReservedCodeCacheSize=64M -XX:MetaspaceSize=64M -Xss512k -Xlog:gc,safepoint -Djava.security.properties=/layers/paketo-buildpacks_bellsoft-liberica/java-security-properties/java-security.properties -XX:+ExitOnOutOfMemoryError -XX:MaxDirectMemorySize=10M -Xmx329297K -XX:MaxMetaspaceSize=93614K -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary -XX:+PrintNMTStatistics -Dorg.springframework.cloud.bindings.boot.enable=true
+[0.014s][info][gc] Using Serial
+[27.986s][info][gc       ] GC(49) Pause Full (CodeCache GC Threshold) 23M->21M(50M) 182.129ms
+[10864.946s][info][gc       ] GC(55) Pause Full (CodeCache GC Threshold) 51M->22M(61M) 2214.953ms
+2026-08-30T05:46:10.128Z  INFO 1 --- [diary] [           main] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=2811 items=20
+2026-08-30T05:46:10.224Z  INFO 1 --- [diary] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-08-30T05:46:10.304Z  INFO 1 --- [diary] [           main] com.example.diary.DiaryApplicationKt     : Started DiaryApplicationKt in 33.366 seconds (process running for 36.079)
+2026-08-30T05:46:12.322Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:46:31.443Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:48:21.651Z  INFO 1 --- [diary] [nio-8080-exec-5] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:48:23.495Z  INFO 1 --- [diary] [nio-8080-exec-9] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:48:32.803Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:50:11.083Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:54:31.075Z  INFO 1 --- [diary] [nio-8080-exec-7] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T06:07:31.074Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T07:12:31.074Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=5 items=20
+2026-08-30T05:46:12.809Z  INFO 1 --- [diary] [nio-8080-exec-1] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=1696
+2026-08-30T05:46:13.820Z  INFO 1 --- [diary] [nio-8080-exec-2] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:48:18.568Z  INFO 1 --- [diary] [nio-8080-exec-9] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:48:20.655Z  INFO 1 --- [diary] [nio-8080-exec-3] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:48:22.627Z  INFO 1 --- [diary] [nio-8080-exec-7] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:51:16.075Z  INFO 1 --- [diary] [nio-8080-exec-3] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:55:36.103Z  INFO 1 --- [diary] [nio-8080-exec-9] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=6 items=20
+2026-08-30T05:46:13.825Z  INFO 1 --- [diary] [nio-8080-exec-2] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=14
+2026-08-30T05:48:22.629Z  INFO 1 --- [diary] [nio-8080-exec-7] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=14
+2026-08-30T08:30:31.081Z  INFO 1 --- [diary] [nio-8080-exec-1] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=14
+[173.482s][info][gc       ] GC(53) Pause Young (Allocation Failure) 54M->42M(56M) 11.260ms
+2026-08-30T05:48:27.716Z  INFO 1 --- [diary] [nio-8080-exec-9] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=24
+2026-08-30T08:25:06.206Z  INFO 1 --- [diary] [nio-8080-exec-4] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=78 items=20
+2026-08-30T08:25:06.209Z  INFO 1 --- [diary] [nio-8080-exec-4] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=82
+
+=== AFTER: counts derived from the complete current container log ===
+metadata_full_gc_count=0
+total_full_gc_count=2
+http_all n=207 p50=7ms p95=19ms p99=82ms max=1696ms
+http_after_first_request n=206 p50=7ms p95=17ms p99=68ms max=84ms
+repository_requests n=207 p50=2ms p95=6ms p99=24ms max=78ms
+
+=== HOST: current warmup timer ===
+diary-warm.service ExecStart=/usr/bin/curl --fail --silent --show-error --output /dev/null --max-time 5 http://127.0.0.1:8080/diary
+diary-warm.timer OnBootSec=1min OnUnitActiveSec=1min AccuracySec=5s
+
+=== AFTER: runtime CodeCache Full GC correlation ===
+2026-08-30T08:46:36.938Z  INFO 1 --- [diary] [nio-8080-exec-1] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=2 items=20
+2026-08-30T08:46:36.939Z  INFO 1 --- [diary] [nio-8080-exec-1] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=6
+[10864.946s][info][gc       ] GC(55) Pause Full (CodeCache GC Threshold) 51M->22M(61M) 2214.953ms
+[10864.947s][info][safepoint] Safepoint "SerialGCCollect", Time since last: 4345872280851 ns, Reaching safepoint: 31921 ns, At safepoint: 2215025381 ns, Leaving safepoint: 15300 ns, Total: 2215072602 ns, Threads: 0 runnable, 27 total
+2026-08-30T08:46:46.078Z  INFO 1 --- [diary] [nio-8080-exec-3] c.example.diary.diary.DiaryRepository    : layer=repository operation=findDiarySlice elapsedMs=3 items=20
+2026-08-30T08:46:46.082Z  INFO 1 --- [diary] [nio-8080-exec-3] com.example.diary.RequestLoggingFilter   : layer=http method=GET path=/diary status=200 elapsedMs=13
+
+=== BEFORE: derived latency sample statistics from 21 preserved values ===
+controller_samples_ms=7608,100,14,13,12,57,15,9225,1109,14,10,19,140,1800,12,14,9,9,14,184,591
+repository_samples_ms=7379,29,8,7,5,14,9,8981,1086,6,5,5,135,1691,5,8,4,4,8,179,357
+controller n=21 p50=15ms p95=7608ms p99=9225ms max=9225ms
+repository n=21 p50=8ms p95=7379ms p99=8981ms max=8981ms
+note=before controller timing excluded HTTP response serialization; after HTTP timing includes the complete servlet filter chain
+note=before n=21 makes nearest-rank p99 equal to the maximum and is not a statistically stable production p99

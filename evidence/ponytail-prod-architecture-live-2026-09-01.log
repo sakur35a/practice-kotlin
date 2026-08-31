@@ -1,0 +1,24 @@
+Measured: 2026-09-01 KST
+
+[public path]
+GET https://diary-6c6.pages.dev/api/diary: status=200 ttfb=0.424545s total=0.424832s
+OPTIONS /api/diary: status=200 allow=POST,GET,HEAD,OPTIONS
+
+[oci-diary]
+uptime=3d19h load=0.00,0.03,0.07
+containers: cloudflared, haproxy, diary-app:0.0.15
+services: diary-db-iap-tunnel active; diary-peer-tunnel active
+
+[oci-diary-2]
+uptime=11d19h load=0.00,0.00,0.03
+containers: cloudflared, haproxy, diary-app:0.0.15
+services: diary-db-iap-tunnel active; diary-peer-tunnel active
+
+[gcp-diary-db]
+uptime=3h50m load=0.00,0.00,0.00
+container: postgres-18 running
+memory: total=951MiB available=443MiB swap=0MiB
+google-cloud-ops-agent=inactive
+
+[scope limitation]
+The Cloudflare Pages project source/configuration is not present in this repository, so the Pages Function's authentication or proxy-only behavior was not directly inspected.

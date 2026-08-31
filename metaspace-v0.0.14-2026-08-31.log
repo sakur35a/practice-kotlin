@@ -1,0 +1,42 @@
+V0.0.14 METASPACE VERIFICATION
+Captured: 2026-08-31
+
+=== CONFIGURATION ===
+host_total_memory=946MiB
+diary_app_container_memory_limit=512MiB
+BPL_JVM_CLASS_ADJUSTMENT=125%
+ReservedCodeCacheSize=128M
+MetaspaceSize=96M
+
+=== oci-diary / initial verification ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.14
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx243773K -XX:MaxMetaspaceSize=113602K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 17643, Headroom: 0%)
+Started DiaryApplicationKt in 40.378 seconds
+metadata_gc_threshold_count=0
+codecache_gc_threshold_count=0
+[115.811s][info][gc,metaspace] GC(67) Metaspace: 73319K(73856K)->73319K(73856K) NonClass: 65135K(65472K)->65135K(65472K) Class: 8184K(8384K)->8184K(8384K)
+container_memory_usage=225.7MB/536.9MB
+
+=== oci-diary-2 / initial verification ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.14
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx243773K -XX:MaxMetaspaceSize=113602K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 17643, Headroom: 0%)
+Started DiaryApplicationKt in 39.609 seconds
+metadata_gc_threshold_count=0
+codecache_gc_threshold_count=0
+[48.445s][info][gc,metaspace] GC(65) Metaspace: 72281K(72768K)->72281K(72768K) NonClass: 64091K(64384K)->64091K(64384K) Class: 8190K(8384K)->8190K(8384K)
+container_memory_usage=236.7MB/536.9MB
+
+=== SIX-MINUTE VERIFICATION ===
+oci-diary uptime=7m metadata_gc_threshold_count=0 codecache_gc_threshold_count=1
+[343.605s][info][gc] GC(76) Pause Full (CodeCache GC Threshold) 32M->22M(54M) 227.286ms
+[446.605s][info][gc,metaspace] GC(77) Metaspace: 74731K(75328K)->74731K(75328K) NonClass: 66578K(66880K)->66578K(66880K) Class: 8152K(8448K)->8152K(8448K)
+oci-diary http n=692 avg=271.0ms p50=267ms p95=309ms p99=400ms min=125ms max=1910ms
+oci-diary container_memory_usage=248.4MB/536.9MB
+
+oci-diary-2 uptime=6m metadata_gc_threshold_count=0 codecache_gc_threshold_count=1
+[350.718s][info][gc] GC(76) Pause Full (CodeCache GC Threshold) 34M->22M(54M) 154.502ms
+[350.718s][info][gc,metaspace] GC(76) Metaspace: 74571K(75072K)->74408K(75072K) NonClass: 66363K(66624K)->66246K(66624K) Class: 8207K(8448K)->8161K(8448K)
+oci-diary-2 http n=595 avg=279.3ms p50=266ms p95=310ms p99=401ms min=128ms max=1995ms
+oci-diary-2 container_memory_usage=253.0MB/536.9MB
+
+result=Metaspace GC Threshold eliminated through the previous six-minute recurrence window; one CodeCache GC Threshold event occurred independently on each backend.

@@ -1,0 +1,26 @@
+Measured: 2026-09-01 KST
+
+[oci-diary]
+free -m: total=946 used=631 free=71 shared=6 buff/cache=390 available=314
+swap -m: total=2545 used=257 free=2288
+java smaps: rss=201876KiB pss=201868KiB anonymous=178748KiB file=23120KiB swap=0KiB
+gcloud IAP tunnel: rss=76696KiB swap=15192KiB
+cloudflared: rss=44044KiB
+podman logs -f diary-app: rss=55756KiB
+podman cgroups: diary-app=184.4MiB cloudflared=34.06MiB haproxy=14.19MiB
+
+[oci-diary-2]
+free -m: total=946 used=627 free=80 shared=11 buff/cache=389 available=318
+swap -m: total=2545 used=203 free=2342
+java smaps: rss=200924KiB pss=200916KiB anonymous=178360KiB file=22556KiB swap=0KiB
+gcloud IAP tunnel: rss=72784KiB swap=14492KiB
+cloudflared: rss=27420KiB
+podman cgroups: diary-app=253.1MiB cloudflared=32.88MiB haproxy=17.96MiB
+
+[deployed JVM limits per 512MiB diary-app cgroup]
+maximum heap (Xmx)=276541KiB
+maximum metaspace=113602KiB; initial metadata GC threshold=96MiB
+reserved code cache=96MiB
+maximum direct memory=10MiB
+thread-stack planning budget=50 threads x 512KiB=25MiB
+Note: limits are ceilings used by the buildpack calculator, not simultaneously committed physical RAM.

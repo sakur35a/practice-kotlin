@@ -1,0 +1,108 @@
+ARCHITECTURE AND MEMORY TUNING EVIDENCE
+Captured: 2026-09-01 KST (server logs use UTC)
+Repository: /Users/sakur35a/IdeaProjects/practice-kotlin
+
+=== CURRENT REQUEST PATH ===
+Cloudflare Pages https://diary-6c6.pages.dev
+  -> /api/diary dynamic proxy
+  -> one Cloudflare Tunnel with two cloudflared replicas (token SHA-256 matched)
+  -> HAProxy on each OCI backend
+  -> local or peer Spring Boot backend (peer path uses SSH local forwarding)
+  -> local gcloud IAP TCP tunnel
+  -> PostgreSQL 18 on GCP us-west1-b
+
+OCI cloudflared token digest 1=ab76c48140624a955787e391c1a795f836d243b946db872a776d950801cb08ba
+OCI cloudflared token digest 2=ab76c48140624a955787e391c1a795f836d243b946db872a776d950801cb08ba
+
+=== BEFORE: OCI JVM v0.0.14 ===
+container_limit=512MiB host_total=946MiB
+JAVA=TieredCompilation level 4, ReservedCodeCacheSize=128M, MetaspaceSize=96M
+Xmx=243773K MaxMetaspaceSize=113602K
+oci-diary startup=40.378s memory=248.4MB full_gc="CodeCache GC Threshold" pause=227.286ms
+oci-diary-2 startup=39.609s memory=253.0MB full_gc="CodeCache GC Threshold" pause=154.502ms
+java_process_rss=267420KiB,270568KiB
+runtime_threads=27
+
+=== EXPERIMENT: OCI2 C1 / CodeCache 64M ===
+Xmx=309309K MaxMetaspaceSize=113602K
+startup=22.739s
+[186.418s][info][gc] GC(73) Pause Full (CodeCache GC Threshold) 34M->22M(55M) 94.824ms
+memory=214.1MB
+result=reject; still caused a Full GC
+
+=== EXPERIMENT: OCI2 C1 / CodeCache 96M ===
+Xmx=276541K MaxMetaspaceSize=113602K
+startup=20.812s
+full_gc_count_through_400s=0
+memory_at_400s=190.7MB
+result=selected
+
+=== BEFORE: DB-BACKED HAPROXY HEALTH CHECK LOAD ===
+check="GET /diary", interval=1s, two HAProxy instances checking local and peer
+oci-diary started=2026-08-31T14:24:14Z repository_logs=2835 at 2026-08-31T14:54Z (~1.58 queries/s)
+oci-diary-2 started=2026-08-31T14:50:17Z repository_logs=352 at 2026-08-31T14:54Z (~1.47 queries/s)
+effect=roughly 260,000 unnecessary trans-Pacific SELECTs/day across both backends
+
+=== AFTER: HAPROXY v0.0.15 ===
+option httpchk OPTIONS /diary
+server local 127.0.0.1:18080 check inter 5s fall 1 rise 1 on-marked-down shutdown-sessions
+server peer 127.0.0.1:18081 check inter 5s fall 1 rise 1
+effect=HTTP process check remains; health checks no longer execute repository SQL
+
+=== BEFORE: GCP E2-MICRO DB MEMORY AND SETTINGS ===
+Mem total=951MiB used=674MiB available=276MiB swap=0
+google Ops Agent OpenTelemetry Collector RSS=158592KiB
+google Ops Agent Fluent Bit RSS=30112KiB
+shared_buffers=128MB
+effective_cache_size=4GB
+max_connections=100
+jit=on
+
+=== AFTER: GCP E2-MICRO DB MEMORY AND SETTINGS ===
+google-cloud-ops-agent enabled=disabled collector_active=inactive
+Mem total=951MiB used=537MiB available=413MiB swap=0
+shared_buffers=128MB
+effective_cache_size=512MB
+max_connections=20
+jit=off
+diaries_count=23
+
+=== V0.0.15 DEPLOYED JVM (BOTH OCI BACKENDS) ===
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx276541K -XX:MaxMetaspaceSize=113602K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 17643, Headroom: 0%)
+JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k
+oci-diary startup=24.838s
+oci-diary-2 startup=24.578s
+live_heap_after_load=30M committed_heap=35M
+live_metaspace_after_load=69016K
+runtime_threads=19
+java_process_rss=201616KiB,199728KiB
+young_gc_pause_typical=1.7-2.2ms observed_max=5.215ms
+metadata_gc_threshold_count=0
+codecache_gc_threshold_count=0
+
+=== V0.0.15 DIRECT LATENCY AFTER HEALTH-CHECK CHANGE ===
+oci-diary n=100 errors=0 avg=148.9ms p50=137.7ms p95=179.9ms p99=268.6ms max=308.3ms
+oci-diary-2 n=100 errors=0 avg=149.3ms p50=136.5ms p95=191.5ms p99=210.9ms max=311.5ms
+
+=== V0.0.15 PUBLIC LATENCY ===
+path=Cloudflare Pages -> Pages Function/proxy -> Tunnel -> HAProxy -> OCI -> IAP -> GCP DB
+n=150 errors=0 connectAvg=12.5ms ttfbAvg=374.1ms totalAvg=374.8ms p50=384.8ms p95=484.1ms p99=490.8ms max=494.8ms
+
+=== TRUE IDLE REQUEST AFTER WARM TIMER REMOVAL ===
+diary-warm.timer enabled=disabled active=inactive on both OCI backends
+idle_period=approximately 3 minutes; HikariCP keepalive remained active
+oci-diary status=200 total=266.034ms repository=262ms
+oci-diary-2 status=200 total=259.438ms repository=256ms
+result=no timeout; first idle request pays connection validation plus SELECT remote round trips
+
+=== DEPLOY-TIME IAP FAILURE OBSERVED ===
+2026-08-31T15:02:42.252Z WARN ConfigServletWebServerApplicationContext: Unable to obtain connection from database: The connection attempt failed.
+Caused by: java.net.SocketTimeoutException: Read timed out
+2026-08-31T15:03:10.066Z INFO DiaryApplicationKt: Started DiaryApplicationKt in 24.838 seconds
+note=Podman restart policy recovered automatically; this is direct evidence that the IAP/remote-DB path remains an availability and cold-start risk.
+
+=== DEPLOYMENT ===
+commit=386d106 perf: reduce idle load and JVM footprint
+tag=v0.0.15
+actions=https://github.com/sakur35a/practice-kotlin/actions/runs/33405765764
+result=success

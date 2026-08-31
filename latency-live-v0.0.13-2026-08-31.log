@@ -1,0 +1,30 @@
+V0.0.13 LIVE LATENCY AND GC EVIDENCE
+Captured: 2026-08-31
+Method: podman logs from both production backend containers
+
+=== oci-diary / my-finance ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.13
+uptime_at_capture=16m
+metadata_gc count=42 totalMs=7796.864 maxMs=402.783
+codecache_gc_count=0
+http n=1493 avg=285.9ms p50=267ms p95=311ms p99=398ms min=129ms max=4608ms
+repository n=1496 avg=276.9ms p50=266ms p95=309ms p99=394ms min=128ms max=5196ms
+[43.396s][info][gc] GC(59) Pause Full (Metadata GC Threshold) 30M->27M(64M) 188.727ms
+[49.788s][info][gc] GC(83) Pause Full (Metadata GC Threshold) 26M->24M(65M) 402.783ms
+[366.480s][info][gc] GC(100) Pause Full (Metadata GC Threshold) 21M->21M(66M) 119.536ms
+
+=== oci-diary-2 / my-finance-db ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.13
+uptime_at_capture=15m
+metadata_gc count=40 totalMs=7561.678 maxMs=593.957
+codecache_gc_count=0
+http n=1392 avg=273.8ms p50=260ms p95=304ms p99=393ms min=123ms max=2791ms
+repository n=1395 avg=272.5ms p50=258ms p95=302ms p99=392ms min=122ms max=6013ms
+[39.067s][info][gc] GC(59) Pause Full (Metadata GC Threshold) 29M->27M(65M) 200.375ms
+[113.955s][info][gc] GC(92) Pause Full (Metadata GC Threshold) 35M->27M(66M) 593.957ms
+[363.091s][info][gc] GC(98) Pause Full (Metadata GC Threshold) 24M->21M(66M) 107.216ms
+
+=== IMPORTANT SAMPLING NOTE ===
+HAProxy configuration checks GET /diary every 1 second from both OCI nodes.
+The live HTTP/repository distributions therefore include health-check traffic and are not end-user-only latency distributions.
+The repository maximum also includes startup warm-up calls that have no matching HTTP request.

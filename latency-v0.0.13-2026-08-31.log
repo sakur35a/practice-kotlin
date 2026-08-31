@@ -1,0 +1,56 @@
+V0.0.13 PRODUCTION VERIFICATION
+Captured: 2026-08-31
+
+=== oci-diary ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.13 started=2026-08-31 13:55:16.948169438 +0000 UTC
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx263761K -XX:MaxMetaspaceSize=93614K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 14114, Headroom: 0%)
+Picked up JAVA_TOOL_OPTIONS: -XX:ReservedCodeCacheSize=128M -XX:MetaspaceSize=64M -Xss512k -Xlog:gc,safepoint
+2026-08-31T13:56:05.410Z INFO Started DiaryApplicationKt in 44.596 seconds
+request=1 status=200 elapsedMs=270.487
+request=2 status=200 elapsedMs=305.263
+request=3 status=200 elapsedMs=262.939
+request=4 status=200 elapsedMs=311.541
+request=5 status=200 elapsedMs=267.197
+request=6 status=200 elapsedMs=267.459
+request=7 status=200 elapsedMs=267.344
+request=8 status=200 elapsedMs=261.233
+request=9 status=200 elapsedMs=273.161
+request=10 status=200 elapsedMs=306.229
+2026-08-31T13:57:50.421Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=266 items=20
+2026-08-31T13:57:50.422Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=268
+2026-08-31T13:57:51.705Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=277 items=20
+2026-08-31T13:57:51.706Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=279
+2026-08-31T13:57:53.003Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=290 items=20
+2026-08-31T13:57:53.005Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=292
+codecache_gc_threshold_count=0
+
+=== SAME-AGE CODE CACHE CHECK ===
+oci-diary uptime=4m codecache_gc_threshold_count=0
+oci-diary-2 uptime=3m codecache_gc_threshold_count=0
+note=with 64M, both previous containers emitted another CodeCache GC Threshold event at about 159 seconds
+combined_curl n=20 avg=263.0ms p50=267.3ms p95=311.5ms p99=378.9ms min=129.0ms max=378.9ms
+previous_v0.0.12_http n=21 avg=440.4ms p50=427ms p95=630ms max=696ms
+comparison p50_delta=-159.7ms(-37.4%) p95_delta=-318.5ms(-50.6%)
+
+=== oci-diary-2 ===
+image=ghcr.io/sakur35a/practice-kotlin:0.0.13 started=2026-08-31 13:56:26.948984741 +0000 UTC
+Calculated JVM Memory Configuration: -XX:MaxDirectMemorySize=10M -Xmx263761K -XX:MaxMetaspaceSize=93614K (Total Memory: 512M, Thread Count: 50, Loaded Class Count: 14114, Headroom: 0%)
+Picked up JAVA_TOOL_OPTIONS: -XX:ReservedCodeCacheSize=128M -XX:MetaspaceSize=64M -Xss512k -Xlog:gc,safepoint
+2026-08-31T13:57:12.319Z INFO Started DiaryApplicationKt in 41.797 seconds
+request=1 status=200 elapsedMs=135.858
+request=2 status=200 elapsedMs=266.899
+request=3 status=200 elapsedMs=129.291
+request=4 status=200 elapsedMs=253.463
+request=5 status=200 elapsedMs=304.496
+request=6 status=200 elapsedMs=128.992
+request=7 status=200 elapsedMs=302.666
+request=8 status=200 elapsedMs=304.744
+request=9 status=200 elapsedMs=262.076
+request=10 status=200 elapsedMs=378.892
+2026-08-31T13:57:49.724Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=288 items=20
+2026-08-31T13:57:49.726Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=291
+2026-08-31T13:57:51.258Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=250 items=20
+2026-08-31T13:57:51.259Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=252
+2026-08-31T13:57:52.327Z INFO DiaryRepository layer=repository operation=findDiarySlice elapsedMs=250 items=20
+2026-08-31T13:57:52.328Z INFO RequestLoggingFilter layer=http method=GET path=/diary status=200 elapsedMs=253
+codecache_gc_threshold_count=0
