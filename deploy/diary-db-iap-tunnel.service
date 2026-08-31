@@ -1,0 +1,13 @@
+[Unit]
+Description=IAP tunnel to the diary database
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Environment=CLOUDSDK_CONFIG=/home/opc/.config/gcloud-diary-iap
+ExecStart=/home/opc/google-cloud-sdk/bin/gcloud compute start-iap-tunnel diary-db 5432 --local-host-port=0.0.0.0:15432 --project=key-decorator-356314 --zone=us-west1-b --verbosity=warning
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=default.target
