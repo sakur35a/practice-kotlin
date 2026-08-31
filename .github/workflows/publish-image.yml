@@ -98,11 +98,13 @@ jobs:
       - name: Configure SSH
         env:
           OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_HOST_2: ${{ secrets.OCI_HOST_2 }}
           OCI_SSH_KNOWN_HOSTS: ${{ secrets.OCI_SSH_KNOWN_HOSTS }}
           OCI_SSH_PRIVATE_KEY: ${{ secrets.OCI_SSH_PRIVATE_KEY }}
           OCI_USER: ${{ secrets.OCI_USER }}
         run: |
           : "${OCI_HOST:?OCI_HOST is required}"
+          : "${OCI_HOST_2:?OCI_HOST_2 is required}"
           : "${OCI_USER:?OCI_USER is required}"
           : "${OCI_SSH_PRIVATE_KEY:?OCI_SSH_PRIVATE_KEY is required}"
           : "${OCI_SSH_KNOWN_HOSTS:?OCI_SSH_KNOWN_HOSTS is required}"
@@ -115,20 +117,26 @@ jobs:
       - name: Upload deployment scripts
         env:
           OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_HOST_2: ${{ secrets.OCI_HOST_2 }}
           OCI_USER: ${{ secrets.OCI_USER }}
         run: |
-          scp -i "$HOME/.ssh/id_oci" \
-            deploy/start.sh deploy/deploy.sh \
-            "$OCI_USER@$OCI_HOST:/home/$OCI_USER/"
+          for host in "$OCI_HOST" "$OCI_HOST_2"; do
+            scp -i "$HOME/.ssh/id_oci" \
+              deploy/start.sh deploy/deploy.sh \
+              "$OCI_USER@$host:/home/$OCI_USER/"
+          done
 
       - name: Deploy image
         env:
           IMAGE: ${{ needs.publish.outputs.image }}
           OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_HOST_2: ${{ secrets.OCI_HOST_2 }}
           OCI_USER: ${{ secrets.OCI_USER }}
         run: |
-          ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$OCI_HOST" \
-            "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
+          for host in "$OCI_HOST" "$OCI_HOST_2"; do
+            ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$host" \
+              "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
+          done
 
       - name: Verify public API
         run: |

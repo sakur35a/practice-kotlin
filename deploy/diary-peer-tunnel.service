@@ -1,0 +1,12 @@
+[Unit]
+Description=Tunnel to the peer diary backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -L 127.0.0.1:18081:127.0.0.1:18080 diary-peer
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=default.target

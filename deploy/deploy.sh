@@ -9,8 +9,14 @@ fi
 readonly IMAGE="$1"
 readonly APP_CONTAINER="diary-app"
 readonly BACKUP_CONTAINER="diary-app-rollback"
-readonly HEALTHCHECK_URL="http://127.0.0.1:8080/diary"
+readonly HEALTHCHECK_URL="http://127.0.0.1:18080/diary"
 readonly START_SCRIPT="${START_SCRIPT:-$HOME/start.sh}"
+export REGISTRY_AUTH_FILE="${REGISTRY_AUTH_FILE:-$HOME/.config/containers/auth.json}"
+
+if [[ ! -r "$REGISTRY_AUTH_FILE" ]]; then
+  echo "Missing registry authentication file: $REGISTRY_AUTH_FILE" >&2
+  exit 1
+fi
 
 container_exists() {
   podman container exists "$1"
