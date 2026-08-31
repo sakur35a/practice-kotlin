@@ -8,3 +8,8 @@ spring:
       connection-timeout: 2000
   profiles:
     default: local
+server:
+  tomcat:
+    threads:
+      max: 32
+      min-spare: 2
