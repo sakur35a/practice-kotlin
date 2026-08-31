@@ -18,7 +18,10 @@ class DiaryDomainTest {
     fun `미리보기 내용은 열 글자 뒤를 생략한다`() {
         val diary = Diary(title = "제목", content = "12345678901")
 
-        assertEquals("1234567890...", DiaryPreviewResponse(diary).content)
+        val preview = DiaryPreviewResponse(diary)
+
+        assertEquals("제목", preview.title)
+        assertEquals("1234567890...", preview.content)
     }
 
     @Test

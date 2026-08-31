@@ -9,7 +9,7 @@ data class DiaryPreviewResponse(
 ) {
     constructor(diary: Diary) : this(
         id = diary.id,
-        title = "${diary.title} ${diary.content}",
+        title = diary.title,
         content = previewContent(diary.content),
     )
 

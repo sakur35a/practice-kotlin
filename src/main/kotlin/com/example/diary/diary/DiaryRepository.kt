@@ -9,6 +9,7 @@ import org.jooq.impl.DSL.noCondition
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Repository
 import java.time.Instant
+import java.util.UUID
 
 @Repository
 class DiaryRepository(
@@ -20,6 +21,12 @@ class DiaryRepository(
         dsl
             .selectFrom(DIARIES)
             .fetch(::toDiary)
+
+    fun findById(id: UUID): Diary? =
+        dsl
+            .selectFrom(DIARIES)
+            .where(DIARIES.ID.eq(id))
+            .fetchOne(::toDiary)
 
     fun findDiarySlice(query: CursorQuery): CursorSlice<Diary> {
         val startedAt = System.nanoTime()

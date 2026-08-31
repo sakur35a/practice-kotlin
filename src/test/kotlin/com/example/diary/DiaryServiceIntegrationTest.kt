@@ -29,8 +29,8 @@ class DiaryServiceIntegrationTest(
 
         diaryService.createDiary(diary)
 
-        val result = diaryService.findAll()
+        val result = diaryService.findById(diary.id)
 
-        assertEquals(listOf(diary), result)
+        assertEquals(diary, result)
     }
 }
