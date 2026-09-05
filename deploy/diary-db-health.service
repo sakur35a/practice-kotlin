@@ -1,0 +1,8 @@
+[Unit]
+Description=Probe diary DB path and recover the IAP tunnel
+After=diary-db-iap-tunnel.service
+Wants=diary-db-iap-tunnel.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'if ! /usr/bin/curl --fail --silent --show-error --output /dev/null --connect-timeout 2 --max-time 8 --retry 1 --retry-delay 2 --retry-all-errors http://127.0.0.1:18080/diary; then printf "%%s DB probe failed; restarting IAP tunnel\n" "$(date -Is)" >> %h/.local/state/diary-db-iap-tunnel/health.log; systemctl --user restart diary-db-iap-tunnel; fi'

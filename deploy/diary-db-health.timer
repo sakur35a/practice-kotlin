@@ -1,0 +1,12 @@
+[Unit]
+Description=Probe the diary DB path every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=5s
+Persistent=true
+Unit=diary-db-health.service
+
+[Install]
+WantedBy=timers.target
