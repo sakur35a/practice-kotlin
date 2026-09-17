@@ -14,15 +14,12 @@ plugins {
 
     id("org.flywaydb.flyway") version "13.0.0"
     id("org.jooq.jooq-codegen-gradle") version "3.21.5"
-    id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
 group = "com.example"
-version =
-    providers
-        .gradleProperty("appVersion")
-        .orElse("0.0.1-SNAPSHOT")
-        .get()
+
+version = providers.gradleProperty("appVersion").orElse("0.0.1-SNAPSHOT").get()
+
 description = "diary"
 
 java {
@@ -37,6 +34,7 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-jooq")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
@@ -120,10 +118,7 @@ jooq {
 
             target {
                 packageName = "com.example.jooq.generated"
-                directory =
-                    layout.projectDirectory
-                        .dir("src/jooq/java")
-                        .asFile.absolutePath
+                directory = layout.projectDirectory.dir("src/jooq/java").asFile.absolutePath
             }
         }
     }
