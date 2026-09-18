@@ -9,11 +9,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.client.RestClient
 
 @RestControllerAdvice
-class GlobalExceptionHandler(
-    restClientBuilder: RestClient.Builder,
-    @Value("\${slack.webhook-url}") private val slackWebhookUrl: String,
-) {
-    private val restClient = restClientBuilder.build()
+class GlobalExceptionHandler(@Value("\${slack.webhook-url}") private val slackWebhookUrl: String) {
+    private val restClient = RestClient.create()
+    private var sendSlack = true
 
     @ExceptionHandler(IllegalArgumentException::class)
     fun handleIllegalArgumentException(ex: IllegalArgumentException): ProblemDetail =
@@ -23,22 +21,30 @@ class GlobalExceptionHandler(
         )
 
     @ExceptionHandler(DataAccessResourceFailureException::class)
-    fun handleDataAccessResourceFailureException(ex: DataAccessResourceFailureException) =
-        restClient
-            .post()
-            .uri(slackWebhookUrl)
-            .body(sendSlack("send from DataAccessResourceFailureException"))
-            .retrieve()
-            .toBodilessEntity()
+    fun handleDataAccessResourceFailureException(ex: DataAccessResourceFailureException) {
+        if (sendSlack) {
+            restClient
+                .post()
+                .uri(slackWebhookUrl)
+                .body(sendSlack("send from DataAccessResourceFailureException"))
+                .retrieve()
+                .toBodilessEntity()
+            sendSlack = false
+        }
+    }
 
     @ExceptionHandler(Exception::class)
-    fun handleException(ex: Exception) =
-        restClient
-            .post()
-            .uri(slackWebhookUrl)
-            .body(sendSlack("send from Exception"))
-            .retrieve()
-            .toBodilessEntity()
+    fun handleException(ex: Exception) {
+        if (sendSlack) {
+            restClient
+                .post()
+                .uri(slackWebhookUrl)
+                .body(sendSlack("send from Exception"))
+                .retrieve()
+                .toBodilessEntity()
+            sendSlack = false
+        }
+    }
 
     private fun sendSlack(message: String) {
         restClient
