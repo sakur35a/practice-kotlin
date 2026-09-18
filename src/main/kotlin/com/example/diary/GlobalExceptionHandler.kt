@@ -23,26 +23,26 @@ class GlobalExceptionHandler(@Value("\${slack.webhook-url}") private val slackWe
     @ExceptionHandler(DataAccessResourceFailureException::class)
     fun handleDataAccessResourceFailureException(ex: DataAccessResourceFailureException) {
         if (sendSlack) {
-            restClient
-                .post()
-                .uri(slackWebhookUrl)
-                .body(sendSlack("send from DataAccessResourceFailureException"))
-                .retrieve()
-                .toBodilessEntity()
             sendSlack = false
+
+            try {
+                sendSlack("send from DataAccessResourceFailureException")
+            } catch (_: Exception) {
+                // Slack 장애가 원래 장애를 증폭시키면 안 됨
+            }
         }
     }
 
     @ExceptionHandler(Exception::class)
     fun handleException(ex: Exception) {
         if (sendSlack) {
-            restClient
-                .post()
-                .uri(slackWebhookUrl)
-                .body(sendSlack("send from Exception"))
-                .retrieve()
-                .toBodilessEntity()
             sendSlack = false
+
+            try {
+                sendSlack("send from Exception")
+            } catch (_: Exception) {
+                // Slack 장애가 원래 장애를 증폭시키면 안 됨
+            }
         }
     }
 
