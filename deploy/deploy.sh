@@ -35,8 +35,6 @@ restore_previous_container() {
   fi
 }
 
-trap restore_previous_container ERR
-
 podman pull "$IMAGE"
 
 if container_exists "$BACKUP_CONTAINER"; then
@@ -48,11 +46,15 @@ if container_exists "$APP_CONTAINER"; then
   podman rename "$APP_CONTAINER" "$BACKUP_CONTAINER"
 fi
 
+# 기존 컨테이너를 옮긴 뒤부터 복구 대상이다. 그 전에 trap을 걸면 pull 실패 시 운영 중인 컨테이너를 지운다.
+# ERR 대신 EXIT를 쓴다: 명시적 `exit 1`(health check 실패/타임아웃)에서는 ERR trap이 실행되지 않는다.
+trap restore_previous_container EXIT
+
 "$START_SCRIPT" "$IMAGE" >/dev/null
 
 for attempt in {1..18}; do
   if curl --fail --silent --show-error --max-time 5 "$HEALTHCHECK_URL" >/dev/null; then
-    trap - ERR
+    trap - EXIT
     if container_exists "$BACKUP_CONTAINER"; then
       podman rm "$BACKUP_CONTAINER" >/dev/null
     fi
