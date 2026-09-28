@@ -6,8 +6,22 @@ spring:
       maximum-pool-size: 4
       minimum-idle: 1
       connection-timeout: 2000
+      validation-timeout: 1000
+      # primary 전환 후 죽은 연결을 요청 전에 걸러낸다
+      keepalive-time: 30000
   profiles:
     default: local
+management:
+  # 컨테이너 밖에는 127.0.0.1로만 노출한다 (deploy/start.sh)
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
 server:
   tomcat:
     threads:

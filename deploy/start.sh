@@ -21,10 +21,11 @@ podman run -d \
   --restart=always \
   --memory=512m \
   -p 127.0.0.1:18080:8080 \
+  -p 127.0.0.1:18090:8081 \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
   -e SPRING_PROFILES_ACTIVE=prod \
   -e SLACK_WEBHOOK_URL \
-  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info,safepoint' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info' \
   --env-file "$ENV_FILE" \
   "$IMAGE"
