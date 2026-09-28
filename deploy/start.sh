@@ -21,6 +21,7 @@ podman run -d \
   --restart=always \
   --memory=512m \
   -p 127.0.0.1:18080:8080 \
+  -p 127.0.0.1:18090:8081 \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
   -e SPRING_PROFILES_ACTIVE=prod \
