@@ -16,11 +16,19 @@ if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
   exit 1
 fi
 
+# 상대 서버 haproxy가 사설망으로 직접 붙는다 (firewalld와 OCI 보안 목록에서 상대 IP만 허용)
+readonly PRIVATE_IP="$(ip -4 route get 1.1.1.1 | sed -n 's/.* src \([0-9.]*\).*/\1/p')"
+if [[ -z "$PRIVATE_IP" ]]; then
+  echo "Cannot determine the private IP address" >&2
+  exit 1
+fi
+
 podman run -d \
   --name diary-app \
   --restart=always \
   --memory=512m \
   -p 127.0.0.1:18080:8080 \
+  -p "$PRIVATE_IP:18080:8080" \
   -p 127.0.0.1:18090:8081 \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
