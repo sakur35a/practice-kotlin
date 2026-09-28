@@ -26,6 +26,6 @@ podman run -d \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
   -e SPRING_PROFILES_ACTIVE=prod \
   -e SLACK_WEBHOOK_URL \
-  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info,safepoint' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info' \
   --env-file "$ENV_FILE" \
   "$IMAGE"
