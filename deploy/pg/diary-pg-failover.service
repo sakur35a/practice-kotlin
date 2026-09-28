@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch the peer diary PostgreSQL primary and promote the local standby when it is gone
+After=diary-pg.service
+
+[Service]
+ExecStart=%h/.local/bin/diary-pg-failover
+Restart=always
+RestartSec=10
+MemoryMax=64M
+
+[Install]
+WantedBy=default.target

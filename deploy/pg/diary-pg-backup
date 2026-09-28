@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# 매일 로컬 DB(primary든 standby든)를 pg_dump 하고 상대 서버에도 사본을 둔다. 14일 보관.
+
+source "$HOME/.local/bin/diary-pg-lib.sh"
+set -e
+
+readonly BACKUP_DIR="$HOME/pg-backups"
+readonly KEEP_DAYS=14
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+
+file="mydb-$(date -u +%Y%m%dT%H%M%SZ)-$(hostname).dump"
+podman exec "$PG_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$BACKUP_DIR/$file.tmp"
+mv "$BACKUP_DIR/$file.tmp" "$BACKUP_DIR/$file"
+size="$(stat -c %s "$BACKUP_DIR/$file")"
+
+if ssh -o BatchMode=yes -o ConnectTimeout=5 diary-peer 'mkdir -p pg-backups && chmod 700 pg-backups' &&
+  scp -q -o BatchMode=yes -o ConnectTimeout=5 "$BACKUP_DIR/$file" "diary-peer:pg-backups/$file"; then
+  copied=peer
+else
+  copied=failed
+  slack "백업 사본을 상대 서버로 보내지 못함: $file"
+fi
+
+find "$BACKUP_DIR" -name 'mydb-*.dump' -mtime +"$KEEP_DAYS" -delete
+log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy="$copied"
