@@ -1,0 +1,6 @@
+# ~/.config/diary-pg/pg_hba.conf. SELF/PEER는 호스트마다 바꾼다.
+local     all          all                        trust
+host      all          all          127.0.0.1/32  scram-sha-256
+hostssl   mydb         myuser       SELF_IP/32    scram-sha-256
+hostssl   mydb         myuser       PEER_IP/32    scram-sha-256
+hostssl   replication  replicator   PEER_IP/32    scram-sha-256
