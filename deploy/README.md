@@ -10,8 +10,10 @@ OCI Always Free VM 두 대에서 diary 앱과 PostgreSQL을 이중화해 운영�
 | 접속 | `ssh oci-diary` (opc) | `ssh oci-diary-2` (opc) |
 | 사설 IP | 10.0.0.108 | 10.0.0.19 |
 | hostname | `my-finance` | `my-finance-db` (옛 이름이 남아 있음) |
-| PostgreSQL 역할 | primary (평소) | standby (평소) |
+| PostgreSQL 역할 (2026-09-29 점검 이후) | standby | primary |
 | 사양 | AMD micro 1/8 OCPU, RAM 1GB, swap 2.5GB, Oracle Linux 9 | 동일 |
+
+두 서버는 대칭이라 **어느 쪽이 primary인지는 장애 전환이나 점검으로 바뀐다.** 원래는 oci-diary가 primary였고, 2026-09-29 OS 업데이트 때 oci-diary-2로 넘긴 상태로 두었다. 현재 역할은 7장의 점검 명령이나 `curl -s http://127.0.0.1:18090/actuator/health/dbRole`로 확인한다.
 
 리전 ap-chuncheon-1, 서브넷 10.0.0.0/24. 공개 진입점은 `https://diary-6c6.pages.dev/api/diary`이다.
 두 서버의 cloudflared가 같은 터널에 붙어 있고, 터널은 `api.ssobbs13.pp.ua`를 `http://127.0.0.1:8080`(haproxy)으로 넘긴다(설정은 Cloudflare 대시보드에서 관리하며, 서버에서는 `podman logs cloudflared`의 `Updated to new configuration`에서 볼 수 있다).
@@ -102,7 +104,9 @@ ssh oci-diary-2 'tail -20 ~/.local/state/diary-pg/events.jsonl'
 ```bash
 ssh <옛 primary> '~/.local/bin/diary-pg-rejoin'
 ```
-확인한 뒤 남은 tar는 지운다. 시험 때 하나가 약 83MB였고, 지우지 않으면 디스크에 계속 쌓인다.
+확인한 뒤 남은 tar는 지운다. 하나가 80~130MB였고, 지우지 않으면 디스크에 계속 쌓인다.
+
+`diary-pg-guard`가 옛 primary(`FENCED`)를 standby로 기동한 경우에도 복제는 붙지만(2026-09-29 확인) 슬롯이 없다. 정식 standby(슬롯 포함)로 만들려면 `diary-pg-rejoin`을 실행한다. 이 경로(`guard_demoted reason=fenced`)는 2026-09-29에 실제 재부팅으로 검증했다.
 
 ### 계획된 점검 (primary를 내려야 할 때)
 자동 전환 경로를 그대로 쓰는 것이 가장 짧다(약 24초, 두 번 시험). 감시를 멈추지 않는다.
@@ -163,7 +167,8 @@ rm /tmp/restore.dump; podman exec diary-pg rm /tmp/restore.dump
 
 꺼 둔 것과 이유:
 - `dnf-makecache.timer`: `MemoryHigh=192M` drop-in 때문에 캐시 갱신이 끝나지 않고 18일간 214MB를 잡고 있었다. **OS 업데이트는 수동**이다(아래)
-- `pcp`(pmcd, pmlogger, pmie), `tuned`: OCI 이미지 기본 구성이며 이 서버에서는 쓰지 않는다. 다시 켜려면 `sudo systemctl enable --now pmcd pmlogger pmie tuned`
+- `pcp`(pmcd, pmlogger, pmie와 관련 타이머): OCI 이미지 기본 구성이며 이 서버에서는 쓰지 않는다. **`dnf upgrade`가 설치 스크립트로 다시 켜기 때문에 `mask`했다.** 다시 쓰려면 `sudo systemctl unmask pmcd pmlogger pmie` 뒤 `enable --now`
+- `tuned`: 같은 이유로 끄고, 다시 켜려면 `sudo systemctl enable --now tuned`
 - Oracle Cloud Agent 플러그인(콘솔 → 인스턴스 → Oracle Cloud Agent): **Compute Instance Monitoring은 켜 둔다**(유휴 회수 판정에 쓰이는 지표). Run Command, Workload Protection, Custom Logs Monitoring은 끈다
 - journald는 영구 저장(최대 200MB)이다(`/etc/systemd/journald.conf.d/persistent.conf`). **컨테이너 로그도 모두 journald로 간다**(로그 드라이버 journald). 컨테이너별 로그 파일이 없어서 크기 제한 옵션은 필요 없다. `podman logs <이름>`으로 본다
 
@@ -176,11 +181,22 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 부팅 직후에는 `diary-ping.service`가 앱이 뜨기 전에 한 번 실패해 남을 수 있다. 해롭지 않으므로 `systemctl --user reset-failed`로 지운다.
 
 ### OS 업데이트 (롤링)
-`dnf-makecache`를 꺼 두어 자동 갱신이 없다. 한 번에 한 서버씩 한다.
+`dnf-makecache`를 꺼 두어 자동 갱신이 없다. 한 번에 한 서버씩 한다. 2026-09-29에 이 절차로 두 서버를 업데이트했다(패키지 317~319개, 커널 6.12.0-204 → 206). 서버당 `dnf`가 30~40분 걸리므로 SSH가 끊겨도 이어지게 서버에서 백그라운드로 돌린다.
+
 1. 최근 백업이 성공했는지 확인한다
-2. **standby부터**: `sudo dnf upgrade -y` → `sudo reboot`
-3. 재부팅 뒤 PG가 standby로 `streaming` 중이고 앱이 200을 주는지 확인한다
-4. **primary**: 4장의 "계획된 점검" 절차로 전환한 뒤 같은 방식으로 업데이트하고 `diary-pg-rejoin`으로 복귀시킨다
+2. **standby부터**
+   1. 그 서버의 앱을 잠시 내린다(`podman stop diary-app`). haproxy가 상대 앱으로만 보내고, `dnf`가 쓸 메모리가 약 200MB 늘어난다
+   2. `sudo sh -c 'nohup dnf upgrade -y > /home/opc/dnf-upgrade.log 2>&1 &'`로 시작하고 로그를 지켜본다. **`dnf` 프로세스가 완전히 끝날 때까지** 재부팅하지 않는다(마지막에 새 커널의 initramfs를 만드는 스크립트가 몇 분 더 돈다. 중간에 재부팅하면 부팅이 깨질 수 있다)
+   3. **재부팅 전에 반드시 아래 두 가지를 되돌린다**(8장 함정 참고)
+      ```bash
+      sudo grubby --update-kernel=ALL --remove-args="crashkernel=1G-64G:448M,64G-:512M"
+      sudo grubby --info=ALL | grep -c crashkernel        # 새 커널 항목에는 0이어야 한다(옛 rescue 항목 1개는 무시)
+      sudo systemctl disable --now pmcd pmlogger pmie pmie_farm pmlogger_farm pmlogger_check.timer pmlogger_daily.timer pmie_check.timer pmie_daily.timer pmie_farm_check.timer pmlogger_farm_check.timer
+      sudo systemctl mask pmcd pmlogger pmie pmie_farm pmlogger_farm pmlogger_check.timer pmlogger_daily.timer pmie_check.timer pmie_daily.timer pmie_farm_check.timer pmlogger_farm_check.timer
+      ```
+   4. `sudo reboot` → 돌아오면 확인한다: `uname -r`이 새 커널인지, **`MemTotal`이 약 946MB인지**, PG가 standby로 `streaming`인지, 앱이 200인지
+3. **primary**: 4장의 "계획된 점검"으로 먼저 primary를 넘긴다(`systemctl --user stop diary-pg` → 약 30초 뒤 승격). DB 역할이 없는 옛 primary에서 2번과 같은 방식으로 업데이트하고 재부팅한다. 재부팅 때 `diary-pg-guard`가 `FENCED`를 보고 standby로 기동한다. 그 뒤 `diary-pg-rejoin`으로 정식 standby로 복귀시키고 tar를 지운다
+4. 전환된 역할은 그대로 두어도 된다. 백업은 현재 primary에서 실행된다
 
 ### PostgreSQL 마이너 업그레이드
 이미지 태그(`postgres:18.6`)는 quadlet 파일에 고정되어 있다. standby에서 `Image=`를 바꾸고 `daemon-reload` → `systemctl --user restart diary-pg`, 복제 상태를 확인한다. 그 뒤 primary는 "계획된 점검" 절차로 전환하고 같은 방식으로 올린다.
@@ -191,6 +207,8 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 - PG 설정 디렉터리 `~/.config/diary-pg`는 권한 711이어야 한다. 700이면 컨테이너 안 postgres가 인증서를 읽지 못해 기동하지 못한다
 - 5432(PG)와 18080(앱)은 firewalld와 OCI 보안 목록 양쪽에서 **상대 서버 IP(/32)만** 허용한다. 하나라도 빠지면 `No route to host`(firewalld) 또는 타임아웃(보안 목록)이 난다
 - `diary-peer` SSH 별칭은 옛 primary 차단과 `diary-pg-rejoin`에서 쓴다. 지우지 않는다
+- **`dnf upgrade`가 새 커널에 `crashkernel=1G-64G:448M,64G-:512M`을 붙여 메모리를 절반으로 줄인다.** `kexec-tools`의 설치 후 스크립트(`kdumpctl _reset-crashkernel-after-update`)가 하는 일이라, `/usr/lib/kernel/install.d/92-crashkernel.install` 훅을 mask해도 막히지 않았다. kdump를 쓰지 않으므로 448MB가 그냥 사라진다(전체 946MB가 498MB로 보인다). 재부팅 전에 `grubby --remove-args`로 제거하고, 재부팅 뒤 `MemTotal`(약 946MB)을 확인한다. 옛 rescue 부팅 항목 하나에 남아 있는 것은 쓰이지 않는다
+- **`dnf upgrade`가 pcp를 다시 켠다**(pmcd, pmlogger, pmie가 enabled/active로 돌아온다). `mask`해 두었으므로 위 절차로 다시 mask한다
 - quadlet의 `Exec=` 값에 공백이나 `\ `를 넣으면 unit 파일 구조가 깨진다. `log_line_prefix`는 공백 없는 값을 쓴다
 
 ## 9. 무료 조건에서 주의할 것
