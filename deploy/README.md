@@ -72,6 +72,7 @@ git tag v0.0.22 && git push origin v0.0.22
 ```
 
 - 서버에서는 `start.sh`와 `deploy.sh`, `haproxy.cfg`를 올리고 haproxy를 재시작한 뒤 `deploy.sh <이미지>`를 실행한다. 새 컨테이너가 health check(`/diary`)를 통과하지 못하면 이전 컨테이너로 되돌린다.
+- 배포에 성공하면 옛 앱 이미지를 지운다. 숫자 버전 태그 중 **최신 3개만 남긴다**(`prune_old_images`). 이전에는 배포마다 약 150MB씩 쌓였다. 실행 중인 컨테이너의 이미지는 지워지지 않고, 정리가 실패해도 배포 결과에는 영향이 없다. 지운 버전이 필요하면 ghcr.io에서 태그로 다시 받는다
 - 두 서버를 차례로 하므로 한쪽이 재시작하는 동안 다른 쪽이 받는다.
 - `start.sh`는 `SLACK_WEBHOOK_URL`이 없으면 실패한다.
 - 앱 이미지가 바뀌지 않는 변경(`haproxy.cfg`, `deploy/pg/*`)은 태그가 필요 없다. 서버에 직접 올린다.
@@ -164,7 +165,7 @@ rm /tmp/restore.dump; podman exec diary-pg rm /tmp/restore.dump
 - `dnf-makecache.timer`: `MemoryHigh=192M` drop-in 때문에 캐시 갱신이 끝나지 않고 18일간 214MB를 잡고 있었다. **OS 업데이트는 수동**이다(아래)
 - `pcp`(pmcd, pmlogger, pmie), `tuned`: OCI 이미지 기본 구성이며 이 서버에서는 쓰지 않는다. 다시 켜려면 `sudo systemctl enable --now pmcd pmlogger pmie tuned`
 - Oracle Cloud Agent 플러그인(콘솔 → 인스턴스 → Oracle Cloud Agent): **Compute Instance Monitoring은 켜 둔다**(유휴 회수 판정에 쓰이는 지표). Run Command, Workload Protection, Custom Logs Monitoring은 끈다
-- journald는 영구 저장(최대 200MB)이다(`/etc/systemd/journald.conf.d/persistent.conf`)
+- journald는 영구 저장(최대 200MB)이다(`/etc/systemd/journald.conf.d/persistent.conf`). **컨테이너 로그도 모두 journald로 간다**(로그 드라이버 journald). 컨테이너별 로그 파일이 없어서 크기 제한 옵션은 필요 없다. `podman logs <이름>`으로 본다
 
 ## 7. 정비
 
