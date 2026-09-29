@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# 매일 로컬 DB(primary든 standby든)를 pg_dump 하고 상대 서버에도 사본을 둔다. 14일 보관.
+# 매일 로컬 DB(primary든 standby든)를 pg_dump 하고 상대 서버에도 사본을 둔다. 로컬 14일 보관.
+# OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에도 올린다. 30일 보관.
 
 source "$HOME/.local/bin/diary-pg-lib.sh"
 set -e
 
 readonly BACKUP_DIR="$HOME/pg-backups"
 readonly KEEP_DAYS=14
+readonly OS_KEEP_DAYS=30
+readonly OS_TOOL="$HOME/.local/bin/diary-os-put"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
 
@@ -22,5 +25,17 @@ else
   slack "백업 사본을 상대 서버로 보내지 못함: $file"
 fi
 
+copied_os=skipped
+if [[ -r "$HOME/.config/diary-objectstorage.env" ]]; then
+  if os_out="$("$OS_TOOL" put "$BACKUP_DIR/$file" "pg/$file" 2>&1)"; then
+    copied_os=ok
+    "$OS_TOOL" prune pg/ "$OS_KEEP_DAYS" >/dev/null 2>&1 || log_event os_prune_failed
+  else
+    copied_os=failed
+    log_event os_upload_failed error="${os_out:0:300}"
+    slack "Object Storage 업로드 실패: $file (${os_out:0:150})"
+  fi
+fi
+
 find "$BACKUP_DIR" -name 'mydb-*.dump' -mtime +"$KEEP_DAYS" -delete
-log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy="$copied"
+log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy="$copied" copy_os="$copied_os"
