@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
-# 매일 로컬 DB(primary든 standby든)를 pg_dump 한다. 로컬에는 최신 3개만 남긴다(업로드 원본, 빠른 복원용).
+# 매일 pg_dump 한다. standby는 primary와 같은 데이터라 건너뛴다. 타이머는 두 서버에 있고,
+# 장애 전환으로 primary가 바뀌면 새 primary가 자동으로 이어받는다.
+# 로컬에는 최신 3개만 남긴다(업로드 원본, 빠른 복원용).
 # OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에 올린다. 30일 보관.
 
 source "$HOME/.local/bin/diary-pg-lib.sh"
 set -e
+
+role="$(local_role)"
+if [[ "$role" != primary ]]; then
+  log_event backup_skipped role="$role"
+  # 로컬 PG에 접속하지 못하는 것은 standby여도 알릴 일이다
+  [[ "$role" == down ]] && slack "로컬 PG에 접속하지 못해 백업을 건너뜀"
+  exit 0
+fi
 
 readonly BACKUP_DIR="$HOME/pg-backups"
 readonly KEEP_LOCAL=3
@@ -31,4 +41,4 @@ fi
 
 # 날짜가 아니라 개수로 남긴다: 백업이 여러 날 실패해도 마지막 덤프가 지워지지 않는다
 ls -1t "$BACKUP_DIR"/mydb-*.dump | tail -n +$((KEEP_LOCAL + 1)) | xargs -r rm -f
-log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy_os="$copied_os"
+log_event backup_done file="$file" bytes="$size" role="$role" copy_os="$copied_os"
