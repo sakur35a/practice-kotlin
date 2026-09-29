@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""OCI Object Storage(S3 호환 API)에 백업을 올리고 오래된 것을 지운다. 표준 라이브러리만 쓴다.
+
+서버의 curl 7.76(--aws-sigv4)은 OCI가 요구하는 x-amz-content-sha256 헤더를 보내지 않아
+"secret key ... could not be found" 오류로 거부되므로 SigV4 서명을 직접 한다.
+
+  diary-os-put put <로컬 파일> <객체 이름>        업로드 후 HEAD로 크기 대조
+  diary-os-put prune <접두사> <보관 일수> [--dry-run]   오래된 객체 삭제 (최신 3개는 항상 보존)
+
+설정: ~/.config/diary-objectstorage.env
+  OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY (Customer Secret Key), OCI_NAMESPACE, OCI_BUCKET, OCI_REGION
+"""
+import datetime
+import hashlib
+import hmac
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+
+KEEP_NEWEST = 3
+S3_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
+
+
+def load_env():
+    env = {}
+    with open(os.path.expanduser("~/.config/diary-objectstorage.env")) as f:
+        for line in f:
+            key, _, value = line.rstrip("\n").partition("=")
+            if key:
+                env[key] = value
+    return env
+
+
+ENV = load_env()
+REGION = ENV["OCI_REGION"]
+BUCKET = ENV["OCI_BUCKET"]
+HOST = f"{ENV['OCI_NAMESPACE']}.compat.objectstorage.{REGION}.oraclecloud.com"
+
+
+def request(method, key="", query=None, body=b""):
+    """서명한 요청을 보내고 (status, headers, body)를 돌려준다."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    day = now.strftime("%Y%m%d")
+    payload_hash = hashlib.sha256(body).hexdigest()
+
+    path = "/" + urllib.parse.quote(f"{BUCKET}/{key}" if key else BUCKET, safe="/-_.~")
+    pairs = sorted((urllib.parse.quote(k, safe="-_.~"), urllib.parse.quote(v, safe="-_.~")) for k, v in (query or {}).items())
+    canonical_query = "&".join(f"{k}={v}" for k, v in pairs)
+
+    headers = {"host": HOST, "x-amz-content-sha256": payload_hash, "x-amz-date": amz_date}
+    names = sorted(headers)
+    canonical = "\n".join([
+        method, path, canonical_query,
+        "".join(f"{n}:{headers[n]}\n" for n in names),
+        ";".join(names), payload_hash,
+    ])
+    scope = f"{day}/{REGION}/s3/aws4_request"
+    to_sign = "\n".join(["AWS4-HMAC-SHA256", amz_date, scope, hashlib.sha256(canonical.encode()).hexdigest()])
+    signing_key = ("AWS4" + ENV["OCI_S3_SECRET_KEY"]).encode()
+    for part in (day, REGION, "s3", "aws4_request"):
+        signing_key = hmac.new(signing_key, part.encode(), hashlib.sha256).digest()
+    signature = hmac.new(signing_key, to_sign.encode(), hashlib.sha256).hexdigest()
+
+    send_headers = {n: v for n, v in headers.items() if n != "host"}
+    send_headers["Authorization"] = (
+        f"AWS4-HMAC-SHA256 Credential={ENV['OCI_S3_ACCESS_KEY']}/{scope}, "
+        f"SignedHeaders={';'.join(names)}, Signature={signature}"
+    )
+    url = f"https://{HOST}{path}" + (f"?{canonical_query}" if canonical_query else "")
+    req = urllib.request.Request(url, data=body if method == "PUT" else None, method=method, headers=send_headers)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, resp.headers, resp.read()
+    except urllib.error.HTTPError as err:
+        return err.code, err.headers, err.read()
+
+
+def fail(message):
+    print(f"diary-os-put: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def cmd_put(path, key):
+    with open(path, "rb") as f:
+        data = f.read()
+    status, _, body = request("PUT", key, body=data)
+    if status != 200:
+        fail(f"PUT {key} -> HTTP {status} {body[:200]!r}")
+    status, headers, _ = request("HEAD", key)
+    remote_size = headers.get("Content-Length")
+    if status != 200 or remote_size != str(len(data)):
+        fail(f"HEAD {key} -> HTTP {status}, remote size {remote_size} != local {len(data)}")
+    print(f"uploaded {key} ({len(data)} bytes)")
+
+
+def list_objects(prefix):
+    objects, token = [], None
+    while True:
+        query = {"list-type": "2", "prefix": prefix, "max-keys": "1000"}
+        if token:
+            query["continuation-token"] = token
+        status, _, body = request("GET", query=query)
+        if status != 200:
+            fail(f"LIST {prefix} -> HTTP {status} {body[:200]!r}")
+        root = ET.fromstring(body)
+        for item in root.findall(f"{S3_NS}Contents"):
+            modified = datetime.datetime.fromisoformat(item.findtext(f"{S3_NS}LastModified").replace("Z", "+00:00"))
+            objects.append((item.findtext(f"{S3_NS}Key"), modified))
+        if root.findtext(f"{S3_NS}IsTruncated") != "true":
+            return objects
+        token = root.findtext(f"{S3_NS}NextContinuationToken")
+
+
+def cmd_prune(prefix, keep_days, dry_run):
+    objects = sorted(list_objects(prefix), key=lambda o: o[1], reverse=True)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=keep_days)
+    # 시계가 틀어져도 전부 지우지 않도록 최신 몇 개는 나이와 상관없이 남긴다
+    stale = [key for key, modified in objects[KEEP_NEWEST:] if modified < cutoff]
+    for key in stale:
+        if dry_run:
+            print(f"would delete {key}")
+            continue
+        status, _, body = request("DELETE", key)
+        if status not in (200, 204):
+            fail(f"DELETE {key} -> HTTP {status} {body[:200]!r}")
+        print(f"deleted {key}")
+    print(f"{len(objects)} objects under {prefix}, {len(stale)} older than {keep_days}d {'(dry run)' if dry_run else 'removed'}")
+
+
+def main(argv):
+    if len(argv) == 4 and argv[1] == "put":
+        cmd_put(argv[2], argv[3])
+    elif len(argv) in (4, 5) and argv[1] == "prune":
+        cmd_prune(argv[2], int(argv[3]), "--dry-run" in argv[4:])
+    else:
+        fail("usage: diary-os-put put <file> <key> | prune <prefix> <days> [--dry-run]")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
