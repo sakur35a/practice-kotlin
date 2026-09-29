@@ -5,6 +5,8 @@
 "secret key ... could not be found" 오류로 거부되므로 SigV4 서명을 직접 한다.
 
   diary-os-put put <로컬 파일> <객체 이름>        업로드 후 HEAD로 크기 대조
+  diary-os-put list [접두사]                     객체 목록 (시각, 크기, 이름)
+  diary-os-put get <객체 이름> <로컬 파일>        내려받기 (이미 있는 파일은 덮어쓰지 않는다)
   diary-os-put prune <접두사> <보관 일수> [--dry-run]   오래된 객체 삭제 (최신 3개는 항상 보존)
 
 설정: ~/.config/diary-objectstorage.env
@@ -109,7 +111,7 @@ def list_objects(prefix):
         root = ET.fromstring(body)
         for item in root.findall(f"{S3_NS}Contents"):
             modified = datetime.datetime.fromisoformat(item.findtext(f"{S3_NS}LastModified").replace("Z", "+00:00"))
-            objects.append((item.findtext(f"{S3_NS}Key"), modified))
+            objects.append((item.findtext(f"{S3_NS}Key"), modified, int(item.findtext(f"{S3_NS}Size"))))
         if root.findtext(f"{S3_NS}IsTruncated") != "true":
             return objects
         token = root.findtext(f"{S3_NS}NextContinuationToken")
@@ -119,7 +121,7 @@ def cmd_prune(prefix, keep_days, dry_run):
     objects = sorted(list_objects(prefix), key=lambda o: o[1], reverse=True)
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=keep_days)
     # 시계가 틀어져도 전부 지우지 않도록 최신 몇 개는 나이와 상관없이 남긴다
-    stale = [key for key, modified in objects[KEEP_NEWEST:] if modified < cutoff]
+    stale = [key for key, modified, _ in objects[KEEP_NEWEST:] if modified < cutoff]
     for key in stale:
         if dry_run:
             print(f"would delete {key}")
@@ -131,13 +133,37 @@ def cmd_prune(prefix, keep_days, dry_run):
     print(f"{len(objects)} objects under {prefix}, {len(stale)} older than {keep_days}d {'(dry run)' if dry_run else 'removed'}")
 
 
+def cmd_list(prefix):
+    for key, modified, size in sorted(list_objects(prefix), key=lambda o: o[1]):
+        print(f"{modified.strftime('%Y-%m-%dT%H:%M:%SZ')} {size:>10} {key}")
+
+
+def cmd_get(key, path):
+    if os.path.exists(path):
+        fail(f"{path} already exists")
+    status, headers, body = request("GET", key)
+    if status != 200:
+        fail(f"GET {key} -> HTTP {status} {body[:200]!r}")
+    if headers.get("Content-Length") not in (None, str(len(body))):
+        fail(f"GET {key}: received {len(body)} bytes, expected {headers.get('Content-Length')}")
+    tmp = f"{path}.part"
+    with open(tmp, "wb") as f:
+        f.write(body)
+    os.replace(tmp, path)
+    print(f"downloaded {key} -> {path} ({len(body)} bytes)")
+
+
 def main(argv):
     if len(argv) == 4 and argv[1] == "put":
         cmd_put(argv[2], argv[3])
     elif len(argv) in (4, 5) and argv[1] == "prune":
         cmd_prune(argv[2], int(argv[3]), "--dry-run" in argv[4:])
+    elif len(argv) in (2, 3) and argv[1] == "list":
+        cmd_list(argv[2] if len(argv) == 3 else "")
+    elif len(argv) == 4 and argv[1] == "get":
+        cmd_get(argv[2], argv[3])
     else:
-        fail("usage: diary-os-put put <file> <key> | prune <prefix> <days> [--dry-run]")
+        fail("usage: diary-os-put put <file> <key> | get <key> <file> | list [prefix] | prune <prefix> <days> [--dry-run]")
 
 
 if __name__ == "__main__":
