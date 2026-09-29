@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 매일 로컬 DB(primary든 standby든)를 pg_dump 하고 상대 서버에도 사본을 둔다. 로컬 14일 보관.
-# OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에도 올린다. 30일 보관.
+# 매일 로컬 DB(primary든 standby든)를 pg_dump 한다. 로컬에는 최신 3개만 남긴다(업로드 원본, 빠른 복원용).
+# OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에 올린다. 30일 보관.
 
 source "$HOME/.local/bin/diary-pg-lib.sh"
 set -e
 
 readonly BACKUP_DIR="$HOME/pg-backups"
-readonly KEEP_DAYS=14
+readonly KEEP_LOCAL=3
 readonly OS_KEEP_DAYS=30
 readonly OS_TOOL="$HOME/.local/bin/diary-os-put"
 mkdir -p "$BACKUP_DIR"
@@ -16,14 +16,6 @@ file="mydb-$(date -u +%Y%m%dT%H%M%SZ)-$(hostname).dump"
 podman exec "$PG_CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc >"$BACKUP_DIR/$file.tmp"
 mv "$BACKUP_DIR/$file.tmp" "$BACKUP_DIR/$file"
 size="$(stat -c %s "$BACKUP_DIR/$file")"
-
-if ssh -o BatchMode=yes -o ConnectTimeout=5 diary-peer 'mkdir -p pg-backups && chmod 700 pg-backups' &&
-  scp -q -o BatchMode=yes -o ConnectTimeout=5 "$BACKUP_DIR/$file" "diary-peer:pg-backups/$file"; then
-  copied=peer
-else
-  copied=failed
-  slack "백업 사본을 상대 서버로 보내지 못함: $file"
-fi
 
 copied_os=skipped
 if [[ -r "$HOME/.config/diary-objectstorage.env" ]]; then
@@ -37,5 +29,6 @@ if [[ -r "$HOME/.config/diary-objectstorage.env" ]]; then
   fi
 fi
 
-find "$BACKUP_DIR" -name 'mydb-*.dump' -mtime +"$KEEP_DAYS" -delete
-log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy="$copied" copy_os="$copied_os"
+# 날짜가 아니라 개수로 남긴다: 백업이 여러 날 실패해도 마지막 덤프가 지워지지 않는다
+ls -1t "$BACKUP_DIR"/mydb-*.dump | tail -n +$((KEEP_LOCAL + 1)) | xargs -r rm -f
+log_event backup_done file="$file" bytes="$size" role="$(local_role)" copy_os="$copied_os"
