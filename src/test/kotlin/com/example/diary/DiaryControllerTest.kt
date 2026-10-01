@@ -1,21 +1,20 @@
 package com.example.diary
 
 import com.example.diary.diary.Diary
-import com.example.diary.diary.DiaryCache
+import com.example.diary.diary.EdgeCache
 import com.example.diary.diary.DiaryController
 import com.example.diary.diary.DiaryService
 import com.example.diary.pagination.CursorQuery
 import com.example.diary.pagination.CursorSlice
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
-import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
@@ -28,19 +27,15 @@ import java.util.UUID
 
 // API의 JSON 모양이 엔티티가 아니라 DTO로 정해지는지 확인한다
 @WebMvcTest(DiaryController::class)
-@Import(DiaryCache::class)
 class DiaryControllerTest {
     @Autowired
     lateinit var mockMvc: MockMvc
 
-    @Autowired
-    lateinit var diaryCache: DiaryCache
-
     @MockitoBean
     lateinit var diaryService: DiaryService
 
-    @BeforeEach
-    fun clearListCache() = diaryCache.evictLocal()
+    @MockitoBean
+    lateinit var edgeCache: EdgeCache
 
     @Test
     fun `일기를 만들면 201과 id, title, content만 돌려준다`() {
@@ -115,7 +110,7 @@ class DiaryControllerTest {
                 .andExpect(status().isOk)
                 .andExpect(header().string("Cache-Control", "no-cache"))
                 .andExpect(header().string("Cloudflare-CDN-Cache-Control", "max-age=300"))
-                .andExpect(header().string("Cache-Tag", DiaryCache.EDGE_LIST_TAG))
+                .andExpect(header().string("Cache-Tag", EdgeCache.LIST_TAG))
                 .andExpect(header().string("Access-Control-Allow-Origin", "*"))
                 .andReturn()
                 .response
@@ -125,21 +120,26 @@ class DiaryControllerTest {
     }
 
     @Test
-    fun `목록은 캐시에서 주고, 글을 쓰면 다시 DB에서 읽는다`() {
+    fun `글을 쓰면 엣지 목록 purge를 요청한다`() {
         val diary = Diary(title = "제목", content = "내용")
-        whenever(diaryService.findDiarySlice(any<CursorQuery>()))
-            .thenReturn(CursorSlice(items = listOf(diary), hasNext = false, nextCursorId = null))
         whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenReturn(diary)
-
-        mockMvc.perform(get("/diary")).andExpect(status().isOk)
-        mockMvc.perform(get("/diary")).andExpect(status().isOk)
-        verify(diaryService, times(1)).findDiarySlice(any<CursorQuery>())
 
         mockMvc
             .perform(post("/diary").contentType(MediaType.APPLICATION_JSON).content("""{"title":"제목","content":"내용"}"""))
             .andExpect(status().isCreated)
-        mockMvc.perform(get("/diary")).andExpect(status().isOk)
-        verify(diaryService, times(2)).findDiarySlice(any<CursorQuery>())
+
+        verify(edgeCache, times(1)).purgeList()
+    }
+
+    @Test
+    fun `글쓰기가 실패하면 purge하지 않는다`() {
+        whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenThrow(IllegalArgumentException("Diary id는 UUID v7이어야 합니다: 4"))
+
+        mockMvc
+            .perform(post("/diary").contentType(MediaType.APPLICATION_JSON).content("""{"title":"제목","content":"내용"}"""))
+            .andExpect(status().isBadRequest)
+
+        verify(edgeCache, never()).purgeList()
     }
 
     @Test

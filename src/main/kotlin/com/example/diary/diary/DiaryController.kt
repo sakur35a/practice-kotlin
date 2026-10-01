@@ -20,20 +20,19 @@ import java.util.UUID
 @CrossOrigin
 class DiaryController(
     private val diaryService: DiaryService,
-    private val diaryCache: DiaryCache,
+    private val edgeCache: EdgeCache,
 ) {
     @GetMapping
     fun getDiaryPreviews(cursorQuery: CursorQuery): ResponseEntity<CursorSlice<DiaryPreviewResponse>> =
-        cacheable(DiaryCache.EDGE_LIST_TTL)
-            .header("Cache-Tag", DiaryCache.EDGE_LIST_TAG)
-            .body(diaryCache.slice(cursorQuery) { diaryService.findDiarySlice(cursorQuery).mapItems(::DiaryPreviewResponse) })
+        cacheable(EdgeCache.LIST_TTL)
+            .header("Cache-Tag", EdgeCache.LIST_TAG)
+            .body(diaryService.findDiarySlice(cursorQuery).mapItems(::DiaryPreviewResponse))
 
     @GetMapping("/{id}")
     fun getDiary(
         @PathVariable id: UUID,
     ): ResponseEntity<DiaryResponse> =
-        diaryCache.diary(id) { diaryService.findById(it)?.let(::DiaryResponse) }
-            ?.let { cacheable(DiaryCache.EDGE_DIARY_TTL).body(it) }
+        diaryService.findById(id)?.let { cacheable(EdgeCache.DIARY_TTL).body(DiaryResponse(it)) }
             ?: ResponseEntity.notFound().build()
 
     @PostMapping
@@ -41,7 +40,7 @@ class DiaryController(
         @RequestBody request: DiaryCreateRequest,
     ): ResponseEntity<DiaryResponse> {
         val createdDiary = diaryService.createDiary(request.id, request.title, request.content)
-        diaryCache.afterWrite()
+        edgeCache.purgeList()
 
         return ResponseEntity.created(URI.create("/diary/${createdDiary.id}")).body(DiaryResponse(createdDiary))
     }

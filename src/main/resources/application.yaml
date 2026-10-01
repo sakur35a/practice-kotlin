@@ -39,9 +39,6 @@ server:
 slack:
   webhook-url: ${SLACK_WEBHOOK_URL:http://localhost:8080/dummy}
 diary:
-  cache:
-    # 상대 서버 앱(사설망). 글이 써지면 상대 캐시도 비운다. 비어 있으면 건너뛴다
-    peer-url: ${DIARY_PEER_URL:}
   cloudflare:
     # 글이 써지면 엣지에 캐시된 목록을 purge한다. 비어 있으면 건너뛴다
     zone-id: ${CLOUDFLARE_ZONE_ID:}
