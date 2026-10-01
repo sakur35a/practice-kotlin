@@ -1,5 +1,5 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/mydb?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+    url: jdbc:mysql://localhost:3306/mydb?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&rewriteBatchedStatements=true
     username: myuser
     password: mypassword
