@@ -13,7 +13,7 @@ OCI Always Free VM 두 대에서 diary 앱을 돌리고, DB는 OCI HeatWave MySQ
 | 추가 역할 | 매일 mysqldump 백업, HeatWave 관리자 env | |
 | 사양 | AMD micro 1/8 OCPU, RAM 1GB, swap 2.5GB, Oracle Linux 9 | 동일 |
 
-리전 ap-chuncheon-1. VM 서브넷 10.0.0.0/24, HeatWave는 사설 서브넷 10.0.1.0/24(`10.0.1.93:3306`). 공개 진입점은 `https://diary-6c6.pages.dev/api/diary`이다.
+리전 ap-chuncheon-1. VM 서브넷 10.0.0.0/24, HeatWave는 사설 서브넷 10.0.1.0/24(`10.0.1.93:3306`). 프론트(정적, Cloudflare Pages)는 `https://diary-6c6.pages.dev/`이고, 그 JS가 호출하는 API의 공개 진입점은 `https://api.ssobbs13.pp.ua/diary`이다(`pages.dev/api/diary`는 HTML을 주므로 API 확인에 쓰지 않는다).
 두 서버의 cloudflared가 같은 터널에 붙어 있고, 터널은 `api.ssobbs13.pp.ua`를 `http://127.0.0.1:8080`(haproxy)으로 넘긴다(설정은 Cloudflare 대시보드에서 관리하며, 서버에서는 `podman logs cloudflared`의 `Updated to new configuration`에서 볼 수 있다).
 
 ```
