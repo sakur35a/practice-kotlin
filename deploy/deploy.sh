@@ -22,6 +22,17 @@ container_exists() {
   podman container exists "$1"
 }
 
+# 배포에 성공하면 옛 앱 이미지를 지운다. 숫자 버전 태그 중 최신 KEEP_IMAGES개는 남긴다(직전 버전 롤백용).
+# 실행 중인 컨테이너가 쓰는 이미지는 podman이 삭제를 거부한다. 실패해도 배포 결과에는 영향이 없다.
+readonly KEEP_IMAGES=3
+prune_old_images() {
+  local repo="${IMAGE%:*}" tag
+  while read -r tag; do
+    podman rmi "$repo:$tag" >/dev/null 2>&1 || true
+  done < <(podman images --format '{{.Tag}}' "$repo" | { grep -E '^[0-9]+(\.[0-9]+)*$' || true; } | sort -V | head -n -"$KEEP_IMAGES")
+  podman image prune -f >/dev/null 2>&1 || true
+}
+
 restore_previous_container() {
   echo "Deployment failed; restoring the previous container." >&2
 
@@ -58,6 +69,7 @@ for attempt in {1..18}; do
     if container_exists "$BACKUP_CONTAINER"; then
       podman rm "$BACKUP_CONTAINER" >/dev/null
     fi
+    prune_old_images || true
     echo "Deployment succeeded: $IMAGE"
     exit 0
   fi
