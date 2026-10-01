@@ -40,6 +40,20 @@ SPRING_DATASOURCE_USERNAME=diary_app
 SPRING_DATASOURCE_PASSWORD=...
 ```
 
+### 읽기 캐시 (세 층)
+| 층 | 무엇을 | 얼마나 | 글을 쓰면 |
+|---|---|---|---|
+| 앱 Caffeine (서버마다) | 목록 응답, 한 건 응답 | 목록 5분, 한 건은 크기 제한만(수정/삭제가 없어 바뀌지 않음) | 쓴 서버가 커밋 뒤 자기 목록 캐시를 비우고, 사설망으로 상대 앱 `POST /internal/cache/evict`를 부른다 |
+| Cloudflare 엣지 | `GET /diary*` 200 응답 | 목록 5분, 한 건 1일 (`Cloudflare-CDN-Cache-Control`) | 쓴 서버가 `Cache-Tag: diary-list`를 purge한다(API 토큰 필요) |
+| 브라우저 | ETag | 매번 확인(`Cache-Control: no-cache`), 같으면 304 | 새 ETag로 자연히 바뀐다 |
+
+- 이 비우기는 POST 응답 전에 끝난다. 상대 앱 호출이나 purge가 실패하면 로그(`layer=cache action=peer_evict_failed|edge_purge_failed`)만 남기고 글쓰기는 성공으로 둔다. 그 경우 TTL(5분) 뒤에 맞아진다
+- `/internal/` 경로는 haproxy가 404로 막는다. 상대 앱은 사설망 18080으로 직접 부른다
+- 엣지 캐시는 Cloudflare **캐시 규칙**이 켜져 있어야 동작한다. 규칙: 호스트 `api.ssobbs13.pp.ua`, 경로가 `/diary`로 시작 → Eligible for cache, Edge TTL "Use cache-control header if present, bypass cache if not", Browser TTL "Respect origin". 404/5xx에는 캐시 헤더가 없어 캐시되지 않는다
+- 캐시된 응답이 Origin 없이 온 요청의 것이어도 브라우저가 거부하지 않도록, GET 응답에는 `Access-Control-Allow-Origin: *`를 항상 붙인다
+- 무료 플랜의 태그 purge는 분당 요청 수 제한이 있다. 글이 몰려 제한에 걸리면 purge 실패 로그가 남고 엣지 목록은 최대 5분 늦는다
+- 캐시를 끄고 싶으면 Cloudflare 캐시 규칙만 끄면 된다(앱 캐시는 글을 쓰면 바로 비워진다)
+
 ## 2. 파일 위치
 
 | 무엇 | repo | 서버 |
@@ -48,6 +62,7 @@ SPRING_DATASOURCE_PASSWORD=...
 | 백업/계정 스크립트 | `deploy/mysql/diary-mysql-*` | `~/.local/bin/` |
 | Object Storage 도구 | `deploy/diary-os-put` | `~/.local/bin/` |
 | systemd unit | `deploy/mysql/*.service`, `*.timer` | `~/.config/systemd/user/` (oci-diary만) |
+| 캐시 설정 | | `~/.config/diary.env`의 `DIARY_PEER_URL`(상대 앱 `http://<상대 사설 IP>:18080`), `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN`(Zone → Cache Purge 권한만) |
 | 앱 DB 비밀값 | | `~/.config/diary.env`, `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, 두 서버) |
 | HeatWave 관리자 | | oci-diary `~/.config/heatwave-admin.env` (`MYSQL_ADMIN_USERNAME/PASSWORD`) |
 | Object Storage 키 | | `~/.config/diary-objectstorage.env` (두 서버) |
