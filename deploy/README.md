@@ -122,8 +122,9 @@ ssh <옛 primary> '~/.local/bin/diary-pg-rejoin'
 ## 5. 백업과 복원
 
 - **언제**: 두 서버의 `diary-pg-backup.timer`가 매일 18:30 UTC(최대 10분 지연)에 실행한다. **현재 primary에서만** 덤프하고 standby는 `backup_skipped`를 남긴다. 장애 전환으로 primary가 바뀌면 새 primary가 이어받는다
-- **어디에**: 서버 `~/pg-backups/`에 최신 3개(`mydb-<시각>-<hostname>.dump`, `pg_dump -Fc`), 버킷 `bucket-20260929-0252`(namespace `axnekfrmygfs`, ap-chuncheon-1)의 `pg/` 아래 30일
-- **정리**: 버킷은 업로드할 때마다 30일 지난 객체를 지우되 최신 3개는 항상 남긴다. 로컬은 날짜가 아니라 개수로 남긴다
+- **어디에**: 서버 `~/pg-backups/`에 최신 3개(`mydb-<시각>-<hostname>.dump`, `pg_dump -Fc`), 버킷 `bucket-20260929-0252`(namespace `axnekfrmygfs`, ap-chuncheon-1)의 `pg/` 아래 **가장 최근 1개(하루치)**
+- **정리**: 버킷은 **업로드에 성공한 뒤에만** 이전 백업을 지우고 최신 1개를 남긴다(`diary-os-put prune pg/ 0 --keep-newest 1`). 업로드가 실패한 날에는 정리가 돌지 않아 이전 백업이 그대로 남는다. `--keep-newest`는 최소 1이라 전부 지워지지 않는다. 로컬은 날짜가 아니라 개수(3개)로 남긴다
+- **주의**: 버킷에 하루치만 있으므로 그날 덤프가 잘못되면(예: 데이터가 이미 망가진 뒤의 백업) 되돌릴 이전 백업이 버킷에 없다. 로컬 3개가 그 사이를 메워 주지만 같은 서버에 있다
 - **실패 알림**: 업로드가 실패하면 `os_upload_failed` 이벤트와 Slack. 타이머가 아예 안 돌면 알리는 곳은 아직 없다 → `backup_done` 이벤트를 가끔 확인한다
 
 ### 복원 검증 (운영 DB를 건드리지 않음)

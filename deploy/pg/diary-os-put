@@ -7,7 +7,8 @@
   diary-os-put put <로컬 파일> <객체 이름>        업로드 후 HEAD로 크기 대조
   diary-os-put list [접두사]                     객체 목록 (시각, 크기, 이름)
   diary-os-put get <객체 이름> <로컬 파일>        내려받기 (이미 있는 파일은 덮어쓰지 않는다)
-  diary-os-put prune <접두사> <보관 일수> [--dry-run]   오래된 객체 삭제 (최신 3개는 항상 보존)
+  diary-os-put prune <접두사> <보관 일수> [--keep-newest N] [--dry-run]
+                                                 오래된 객체 삭제. 최신 N개(기본 3, 최소 1)는 나이와 상관없이 보존
 
 설정: ~/.config/diary-objectstorage.env
   OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY (Customer Secret Key), OCI_NAMESPACE, OCI_BUCKET, OCI_REGION
@@ -117,11 +118,11 @@ def list_objects(prefix):
         token = root.findtext(f"{S3_NS}NextContinuationToken")
 
 
-def cmd_prune(prefix, keep_days, dry_run):
+def cmd_prune(prefix, keep_days, dry_run, keep_newest=KEEP_NEWEST):
     objects = sorted(list_objects(prefix), key=lambda o: o[1], reverse=True)
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=keep_days)
-    # 시계가 틀어져도 전부 지우지 않도록 최신 몇 개는 나이와 상관없이 남긴다
-    stale = [key for key, modified, _ in objects[KEEP_NEWEST:] if modified < cutoff]
+    # 시계가 틀어져도 전부 지우지 않도록 최신 몇 개(최소 1개)는 나이와 상관없이 남긴다
+    stale = [key for key, modified, _ in objects[max(keep_newest, 1):] if modified < cutoff]
     for key in stale:
         if dry_run:
             print(f"would delete {key}")
@@ -156,14 +157,16 @@ def cmd_get(key, path):
 def main(argv):
     if len(argv) == 4 and argv[1] == "put":
         cmd_put(argv[2], argv[3])
-    elif len(argv) in (4, 5) and argv[1] == "prune":
-        cmd_prune(argv[2], int(argv[3]), "--dry-run" in argv[4:])
+    elif len(argv) >= 4 and argv[1] == "prune":
+        rest = argv[4:]
+        keep = int(rest[rest.index("--keep-newest") + 1]) if "--keep-newest" in rest else KEEP_NEWEST
+        cmd_prune(argv[2], int(argv[3]), "--dry-run" in rest, keep)
     elif len(argv) in (2, 3) and argv[1] == "list":
         cmd_list(argv[2] if len(argv) == 3 else "")
     elif len(argv) == 4 and argv[1] == "get":
         cmd_get(argv[2], argv[3])
     else:
-        fail("usage: diary-os-put put <file> <key> | get <key> <file> | list [prefix] | prune <prefix> <days> [--dry-run]")
+        fail("usage: diary-os-put put <file> <key> | get <key> <file> | list [prefix] | prune <prefix> <days> [--keep-newest N] [--dry-run]")
 
 
 if __name__ == "__main__":
