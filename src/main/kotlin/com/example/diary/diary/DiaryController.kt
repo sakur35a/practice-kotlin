@@ -28,16 +28,16 @@ class DiaryController(
     @GetMapping("/{id}")
     fun getDiary(
         @PathVariable id: UUID,
-    ): ResponseEntity<Diary> =
-        diaryService.findById(id)?.let { ResponseEntity.ok(it) }
+    ): ResponseEntity<DiaryResponse> =
+        diaryService.findById(id)?.let { ResponseEntity.ok(DiaryResponse(it)) }
             ?: ResponseEntity.notFound().build()
 
     @PostMapping
     fun createDiaries(
-        @RequestBody diary: Diary,
-    ): ResponseEntity<Diary> {
-        val createdDiary = diaryService.createDiary(diary)
+        @RequestBody request: DiaryCreateRequest,
+    ): ResponseEntity<DiaryResponse> {
+        val createdDiary = diaryService.createDiary(request.id, request.title, request.content)
 
-        return ResponseEntity.created(URI.create("/diary/${createdDiary.id}")).body(createdDiary)
+        return ResponseEntity.created(URI.create("/diary/${createdDiary.id}")).body(DiaryResponse(createdDiary))
     }
 }

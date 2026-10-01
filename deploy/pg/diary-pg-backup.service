@@ -1,6 +1,0 @@
-[Unit]
-Description=Dump the diary database and copy it to the peer
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/diary-pg-backup

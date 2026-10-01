@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# 매일 mysqldump를 떠서 Object Storage에 올리고, 성공하면 이전 백업을 지워 최신 1개만 남긴다.
+# HeatWave Always Free의 자체 백업은 1일 보관이고 파일로 받을 수 없어서 이 덤프가 이식 가능한 유일한 사본이다.
+# 한 서버에서만 실행한다(타이머 설치). 로컬에는 최신 3개를 남긴다(업로드 원본, 빠른 복원용).
+
+source "$HOME/.local/bin/diary-mysql-lib.sh"
+
+readonly BACKUP_DIR="$HOME/mysql-backups"
+readonly KEEP_LOCAL=3
+readonly OS_KEEP_NEWEST=1
+readonly OS_TOOL="$HOME/.local/bin/diary-os-put"
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+
+file="mydb-$(date -u +%Y%m%dT%H%M%SZ)-$(hostname).sql.gz"
+tmp="$BACKUP_DIR/$file.tmp"
+
+fail() {
+  rm -f "$tmp"
+  log_event backup_failed reason="$1"
+  slack "MySQL 백업 실패: $1"
+  exit 1
+}
+
+# 비밀번호는 환경 변수로만 넘긴다. --hex-blob: binary(16) id를 16진수로 안전하게 덤프한다
+export MYSQL_PWD="$APP_DB_PASSWORD"
+podman run --rm -e MYSQL_PWD "$MYSQL_IMAGE" mysqldump \
+  -h "$APP_DB_HOST" -u "$APP_DB_USER" --ssl-mode=REQUIRED \
+  --single-transaction --no-tablespaces --set-gtid-purged=OFF --default-character-set=utf8mb4 --hex-blob \
+  --databases "$APP_DB_NAME" 2>"$STATE_DIR/mysqldump.err" | gzip >"$tmp" || fail "mysqldump 실패: $(head -c 200 "$STATE_DIR/mysqldump.err")"
+
+# 비어 있거나 깨진 덤프를 올리지 않는다
+gzip -t "$tmp" 2>/dev/null || fail "덤프 압축이 깨졌다"
+zcat "$tmp" | grep -q "^CREATE DATABASE" || fail "덤프에 CREATE DATABASE가 없다"
+mv "$tmp" "$BACKUP_DIR/$file"
+size="$(stat -c %s "$BACKUP_DIR/$file")"
+
+copied_os=skipped
+if [[ -r "$HOME/.config/diary-objectstorage.env" ]]; then
+  if os_out="$("$OS_TOOL" put "$BACKUP_DIR/$file" "mysql/$file" 2>&1)"; then
+    copied_os=ok
+    "$OS_TOOL" prune mysql/ 0 --keep-newest "$OS_KEEP_NEWEST" >/dev/null 2>&1 || log_event os_prune_failed
+  else
+    copied_os=failed
+    log_event os_upload_failed error="${os_out:0:300}"
+    slack "Object Storage 업로드 실패: $file (${os_out:0:150})"
+  fi
+fi
+
+# 날짜가 아니라 개수로 남긴다: 백업이 여러 날 실패해도 마지막 덤프가 지워지지 않는다
+ls -1t "$BACKUP_DIR"/mydb-*.sql.gz | tail -n +$((KEEP_LOCAL + 1)) | xargs -r rm -f
+log_event backup_done file="$file" bytes="$size" copy_os="$copied_os"

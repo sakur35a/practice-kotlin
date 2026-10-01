@@ -7,8 +7,17 @@ spring:
       minimum-idle: 1
       connection-timeout: 2000
       validation-timeout: 1000
-      # primary 전환 후 죽은 연결을 요청 전에 걸러낸다
+      # DB 재시작(점검) 뒤 죽은 연결을 요청 전에 걸러낸다
       keepalive-time: 30000
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 Flyway가 관리하고 Hibernate는 엔티티와 맞는지 확인만 한다
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
   profiles:
     default: local
 management:
