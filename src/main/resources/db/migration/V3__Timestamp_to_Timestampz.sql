@@ -1,2 +1,0 @@
-ALTER TABLE diaries
-ALTER COLUMN created_at TYPE TIMESTAMPTZ;

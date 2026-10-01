@@ -8,13 +8,22 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 
 class DiaryDomainTest {
     @Nested
     inner class `성공` {
         @Test
         fun `생성한 일기 ID는 UUID v7이다`() {
-            assertEquals(7, Diary(title = "제목", content = "내용").id.version())
+            assertEquals(7, Diary(title = "제목", content = "내용").getId().version())
+        }
+
+        @Test
+        fun `같은 ID의 일기는 같은 일기다`() {
+            val id = Diary(title = "제목", content = "내용").getId()
+
+            assertEquals(Diary(id, "제목", "내용"), Diary(id, "다른 제목", "다른 내용"))
+            assertNotEquals(Diary(title = "제목", content = "내용"), Diary(title = "제목", content = "내용"))
         }
     }
 

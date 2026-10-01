@@ -1,6 +1,5 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/mydb
+    url: jdbc:mysql://localhost:3306/mydb?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
     username: myuser
     password: mypassword
-    driver-class-name: org.postgresql.Driver
