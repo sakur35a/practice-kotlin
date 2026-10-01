@@ -1,0 +1,93 @@
+package com.example.diary
+
+import com.example.diary.diary.Diary
+import com.example.diary.diary.DiaryController
+import com.example.diary.diary.DiaryService
+import com.example.diary.pagination.CursorQuery
+import com.example.diary.pagination.CursorSlice
+import org.junit.jupiter.api.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.whenever
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.http.MediaType
+import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.util.UUID
+
+// API의 JSON 모양이 엔티티가 아니라 DTO로 정해지는지 확인한다
+@WebMvcTest(DiaryController::class)
+class DiaryControllerTest {
+    @Autowired
+    lateinit var mockMvc: MockMvc
+
+    @MockitoBean
+    lateinit var diaryService: DiaryService
+
+    @Test
+    fun `일기를 만들면 201과 id, title, content만 돌려준다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenReturn(diary)
+
+        mockMvc
+            .perform(post("/diary").contentType(MediaType.APPLICATION_JSON).content("""{"title":"제목","content":"내용"}"""))
+            .andExpect(status().isCreated)
+            .andExpect(header().string("Location", "/diary/${diary.id}"))
+            .andExpect(jsonPath("$.id").value(diary.id.toString()))
+            .andExpect(jsonPath("$.title").value("제목"))
+            .andExpect(jsonPath("$.content").value("내용"))
+            .andExpect(jsonPath("$.createdAt").doesNotExist())
+    }
+
+    @Test
+    fun `일기 한 건 조회 응답에는 엔티티 내부 필드가 없다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.findById(diary.id)).thenReturn(diary)
+
+        mockMvc
+            .perform(get("/diary/${diary.id}"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value(diary.id.toString()))
+            .andExpect(jsonPath("$.new").doesNotExist())
+            .andExpect(jsonPath("$.createdAt").doesNotExist())
+    }
+
+    @Test
+    fun `목록은 열 글자 미리보기와 커서를 돌려준다`() {
+        val diary = Diary(title = "제목", content = "12345678901")
+        whenever(diaryService.findDiarySlice(any<CursorQuery>()))
+            .thenReturn(CursorSlice(items = listOf(diary), hasNext = true, nextCursorId = diary.id))
+
+        mockMvc
+            .perform(get("/diary"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.items[0].content").value("1234567890..."))
+            .andExpect(jsonPath("$.hasNext").value(true))
+            .andExpect(jsonPath("$.nextCursorId").value(diary.id.toString()))
+    }
+
+    @Test
+    fun `없는 일기는 404다`() {
+        whenever(diaryService.findById(any())).thenReturn(null)
+
+        mockMvc.perform(get("/diary/${UUID.randomUUID()}")).andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `UUID v7이 아닌 id로 만들면 400이다`() {
+        whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenThrow(IllegalArgumentException("Diary id는 UUID v7이어야 합니다: 4"))
+
+        mockMvc
+            .perform(
+                post("/diary")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"id":"${UUID.randomUUID()}","title":"제목","content":"내용"}"""),
+            ).andExpect(status().isBadRequest)
+    }
+}
