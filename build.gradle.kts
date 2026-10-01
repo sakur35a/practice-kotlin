@@ -34,6 +34,7 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     implementation("com.fasterxml.uuid:java-uuid-generator:5.1.0")
+    implementation("com.github.ben-manes.caffeine:caffeine")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-mysql")
 

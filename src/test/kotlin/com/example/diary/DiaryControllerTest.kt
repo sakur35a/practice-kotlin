@@ -1,16 +1,21 @@
 package com.example.diary
 
 import com.example.diary.diary.Diary
+import com.example.diary.diary.DiaryCache
 import com.example.diary.diary.DiaryController
 import com.example.diary.diary.DiaryService
 import com.example.diary.pagination.CursorQuery
 import com.example.diary.pagination.CursorSlice
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
@@ -23,12 +28,19 @@ import java.util.UUID
 
 // API의 JSON 모양이 엔티티가 아니라 DTO로 정해지는지 확인한다
 @WebMvcTest(DiaryController::class)
+@Import(DiaryCache::class)
 class DiaryControllerTest {
     @Autowired
     lateinit var mockMvc: MockMvc
 
+    @Autowired
+    lateinit var diaryCache: DiaryCache
+
     @MockitoBean
     lateinit var diaryService: DiaryService
+
+    @BeforeEach
+    fun clearListCache() = diaryCache.evictLocal()
 
     @Test
     fun `일기를 만들면 201과 id, title, content만 돌려준다`() {
@@ -89,5 +101,54 @@ class DiaryControllerTest {
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("""{"id":"${UUID.randomUUID()}","title":"제목","content":"내용"}"""),
             ).andExpect(status().isBadRequest)
+    }
+
+    @Test
+    fun `목록은 캐시 헤더와 ETag를 주고, 같은 ETag로 다시 물으면 304다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.findDiarySlice(any<CursorQuery>()))
+            .thenReturn(CursorSlice(items = listOf(diary), hasNext = false, nextCursorId = null))
+
+        val etag =
+            mockMvc
+                .perform(get("/diary"))
+                .andExpect(status().isOk)
+                .andExpect(header().string("Cache-Control", "no-cache"))
+                .andExpect(header().string("Cloudflare-CDN-Cache-Control", "max-age=300"))
+                .andExpect(header().string("Cache-Tag", DiaryCache.EDGE_LIST_TAG))
+                .andExpect(header().string("Access-Control-Allow-Origin", "*"))
+                .andReturn()
+                .response
+                .getHeader("ETag")!!
+
+        mockMvc.perform(get("/diary").header("If-None-Match", etag)).andExpect(status().isNotModified)
+    }
+
+    @Test
+    fun `목록은 캐시에서 주고, 글을 쓰면 다시 DB에서 읽는다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.findDiarySlice(any<CursorQuery>()))
+            .thenReturn(CursorSlice(items = listOf(diary), hasNext = false, nextCursorId = null))
+        whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenReturn(diary)
+
+        mockMvc.perform(get("/diary")).andExpect(status().isOk)
+        mockMvc.perform(get("/diary")).andExpect(status().isOk)
+        verify(diaryService, times(1)).findDiarySlice(any<CursorQuery>())
+
+        mockMvc
+            .perform(post("/diary").contentType(MediaType.APPLICATION_JSON).content("""{"title":"제목","content":"내용"}"""))
+            .andExpect(status().isCreated)
+        mockMvc.perform(get("/diary")).andExpect(status().isOk)
+        verify(diaryService, times(2)).findDiarySlice(any<CursorQuery>())
+    }
+
+    @Test
+    fun `없는 일기 응답에는 엣지 캐시 헤더가 없다`() {
+        whenever(diaryService.findById(any())).thenReturn(null)
+
+        mockMvc
+            .perform(get("/diary/${UUID.randomUUID()}"))
+            .andExpect(status().isNotFound)
+            .andExpect(header().doesNotExist("Cloudflare-CDN-Cache-Control"))
     }
 }
