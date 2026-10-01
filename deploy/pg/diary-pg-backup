@@ -2,7 +2,7 @@
 # 매일 pg_dump 한다. standby는 primary와 같은 데이터라 건너뛴다. 타이머는 두 서버에 있고,
 # 장애 전환으로 primary가 바뀌면 새 primary가 자동으로 이어받는다.
 # 로컬에는 최신 3개만 남긴다(업로드 원본, 빠른 복원용).
-# OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에 올린다. 30일 보관.
+# OCI Object Storage 설정(~/.config/diary-objectstorage.env)이 있으면 그곳에 올리고, 성공하면 이전 백업을 지워 최신 1개만 남긴다.
 
 source "$HOME/.local/bin/diary-pg-lib.sh"
 set -e
@@ -17,7 +17,7 @@ fi
 
 readonly BACKUP_DIR="$HOME/pg-backups"
 readonly KEEP_LOCAL=3
-readonly OS_KEEP_DAYS=30
+readonly OS_KEEP_NEWEST=1 # 버킷에는 가장 최근 백업 1개(하루치)만 둔다
 readonly OS_TOOL="$HOME/.local/bin/diary-os-put"
 mkdir -p "$BACKUP_DIR"
 chmod 700 "$BACKUP_DIR"
@@ -31,7 +31,7 @@ copied_os=skipped
 if [[ -r "$HOME/.config/diary-objectstorage.env" ]]; then
   if os_out="$("$OS_TOOL" put "$BACKUP_DIR/$file" "pg/$file" 2>&1)"; then
     copied_os=ok
-    "$OS_TOOL" prune pg/ "$OS_KEEP_DAYS" >/dev/null 2>&1 || log_event os_prune_failed
+    "$OS_TOOL" prune pg/ 0 --keep-newest "$OS_KEEP_NEWEST" >/dev/null 2>&1 || log_event os_prune_failed
   else
     copied_os=failed
     log_event os_upload_failed error="${os_out:0:300}"
