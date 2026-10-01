@@ -66,6 +66,16 @@ class DiaryServiceIntegrationTest(
         }
 
         @Test
+        fun `64KB가 넘는 긴 본문도 저장한다`() {
+            // MySQL text는 64KB까지라, 한글 3바이트 기준 약 2만 자가 넘어가는 본문으로 mediumtext인지 확인한다
+            val content = "가".repeat(30_000)
+            val created = diaryService.createDiary(id = null, title = "긴 일기", content = content)
+            entityManager.clear()
+
+            assertEquals(content, diaryService.findById(created.id)?.content)
+        }
+
+        @Test
         fun `생성 시각은 시간대와 상관없이 UTC로 저장한다`() {
             val created = diaryService.createDiary(id = null, title = "제목", content = "내용")
             entityManager.flush()

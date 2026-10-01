@@ -23,7 +23,7 @@ class Diary(
     private val id: UUID = newDiaryId(),
     @Column(name = "title", nullable = false, length = 255)
     val title: String,
-    @Column(name = "content", nullable = false, columnDefinition = "text")
+    @Column(name = "content", nullable = false, columnDefinition = "mediumtext")
     @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     val content: String,
 ) : Persistable<UUID> {
