@@ -9,10 +9,10 @@ if [[ ! -r "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# 값 없이 이름만 넘기면 podman이 현재 셸의 값을 전달한다 (ps에 webhook이 노출되지 않음).
-# 비어 있으면 앱이 dummy URL로 떨어지므로 여기서 실패시킨다.
-if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
-  echo "SLACK_WEBHOOK_URL is not set" >&2
+# Secret Manager 접근용 서비스 계정 키 (읽기 전용으로 컨테이너에 마운트한다)
+readonly GCP_KEY_FILE="${GCP_KEY_FILE:-$HOME/.config/diary-gcp-sa.json}"
+if [[ ! -r "$GCP_KEY_FILE" ]]; then
+  echo "Missing GCP service account key: $GCP_KEY_FILE" >&2
   exit 1
 fi
 
@@ -33,7 +33,8 @@ podman run -d \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e SLACK_WEBHOOK_URL \
+  -v "$GCP_KEY_FILE:/secrets/gcp-sa.json:ro,Z" \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json \
   -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info' \
   --env-file "$ENV_FILE" \
   "$IMAGE"

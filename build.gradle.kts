@@ -25,6 +25,13 @@ repositories {
     mavenCentral()
 }
 
+dependencyManagement {
+    imports {
+        // Spring Boot 4.1.0과 맞는 릴리스 (8.2.x는 Boot 4.1.1 기준)
+        mavenBom("com.google.cloud:spring-cloud-gcp-dependencies:8.1.1")
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
@@ -36,6 +43,8 @@ dependencies {
     implementation("com.fasterxml.uuid:java-uuid-generator:5.1.0")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-mysql")
+
+    implementation("com.google.cloud:spring-cloud-gcp-starter-secretmanager")
 
     runtimeOnly("com.mysql:mysql-connector-j")
 

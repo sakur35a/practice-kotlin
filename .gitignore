@@ -41,3 +41,7 @@ out/
 
 ### macOS ###
 .DS_Store
+
+### Secrets ###
+*-sa.json
+.env*

@@ -1,0 +1,14 @@
+spring:
+  config:
+    # GCP Secret Manager (프로젝트 key-decorator-356314). 인증은 ADC / GOOGLE_APPLICATION_CREDENTIALS
+    import: sm://
+  cloud:
+    gcp:
+      project-id: key-decorator-356314
+  datasource:
+    password: ${sm@diary-db-password}
+slack:
+  webhook-url: ${sm@diary-slack-webhook-url}
+diary:
+  cloudflare:
+    api-token: ${sm@diary-cloudflare-api-token}
