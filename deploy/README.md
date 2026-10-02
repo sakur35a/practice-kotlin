@@ -23,7 +23,7 @@ OCI Always Free VM 두 대에서 diary 앱을 돌리고, DB는 OCI HeatWave MySQ
                                                                        └─ 10.0.0.19:18080  (oci-diary-2 앱) ┴─ JDBC(TLS) → HeatWave MySQL 10.0.1.93
 ```
 
-- **haproxy**: 두 앱을 roundrobin으로 본다. `OPTIONS /diary`가 200이 아니면 5초 안에 제외하고, 실패한 요청은 다른 앱으로 재시도한다. 단 POST는 연결 실패만 재시도한다(응답이 실패한 POST를 다시 보내면 중복 저장될 수 있다). 두 서버가 같은 `haproxy.cfg`를 쓴다.
+- **haproxy**: 두 앱을 roundrobin으로 보되 가중치는 `oci-diary:oci-diary-2 = 1:2`다. Cloudflare가 터널 트래픽을 `oci-diary`의 커넥터로만 보내서 그 서버는 cloudflared와 haproxy 몫(약 9% CPU)을 더 쓰기 때문이다. Mac→Cloudflare→OCI 부하 시험(캐시 우회, 동시 64)에서 1:1일 때 단건 약 136 rps, 목록 약 86~120 rps였고 1:2로 바꾸자 단건 약 162, 목록 약 143 rps로 올랐고 p95도 줄었다(두 서버 CPU steal도 비슷해졌다). 입구가 `oci-diary-2`로 바뀌면 오히려 그쪽이 더 바빠지므로, 입구가 바뀐 것이 보이면(`podman top cloudflared`/CPU) 가중치를 1:1로 되돌린다. 두 서버가 같은 설정 파일을 쓴다. 실제 사용자 트래픽은 대부분 Cloudflare 엣지 캐시에서 끝나서 이 용량이 모자랄 일은 드물다. 그 밖에 `OPTIONS /diary`가 200이 아니면 5초 안에 제외하고, 실패한 요청은 다른 앱으로 재시도한다. 단 POST는 연결 실패만 재시도한다(응답이 실패한 POST를 다시 보내면 중복 저장될 수 있다). 두 서버가 같은 `haproxy.cfg`를 쓴다.
 - **앱**: 컨테이너 `diary-app` (`--memory=512m`). 호스트에 `127.0.0.1:18080`, 사설 IP`:18080`(상대 haproxy용), `127.0.0.1:18090`(Actuator)으로 열린다. JPA(Hibernate) + Flyway로 `mydb.diaries`를 쓴다.
 - **HeatWave MySQL**: DB 시스템 `mysql20261001232543`, 데이터베이스 `mydb`, 앱 계정 `diary_app`(TLS 필수, `mydb.*`만 권한).
 
