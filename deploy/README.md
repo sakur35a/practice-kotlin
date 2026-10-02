@@ -184,4 +184,4 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 - 춘천 리전은 Always Free A1(Arm) 인스턴스를 만들 수 없다
 - Object Storage 무료 한도는 20GB, 월 API 요청 5만 건이다. 백업은 하루 몇 건이라 여유가 크다
 - 모든 백업이 같은 OCI 계정 안에 있다. 계정이 회수되면 DB와 백업이 함께 사라진다
-- GCP는 2026-09-29에 정리했다(2026-10-03까지 Secret Manager 시크릿 3개만 남아 있었고 OCI Vault로 옮겼다). 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
+- 앱은 2026-10-03부터 GCP를 쓰지 않는다(시크릿 3개는 OCI Vault로 옮겼다). GCP 프로젝트 `key-decorator-356314`는 앱과 무관해져서 삭제 대상이다. OCI Vault를 처음부터 다시 만들 때는 콘솔에서 Vault(Default), 소프트웨어 보호 AES-256 키, 시크릿 3개를 만들고, 동적 그룹 `diary-instances`(규칙 `Any {instance.id = '<oci-diary OCID>', instance.id = '<oci-diary-2 OCID>'}`)와 정책 `diary-read-secrets`(`Allow dynamic-group diary-instances to read secret-bundles in compartment id <컴파트먼트> where target.vault.id = '<Vault OCID>'`)를 만든 뒤 `start.sh`의 `VAULT_ID`를 새 값으로 바꾼다. 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
