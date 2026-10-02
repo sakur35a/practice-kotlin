@@ -63,7 +63,7 @@ SPRING_DATASOURCE_PASSWORD=...
 | Object Storage 도구 | `deploy/diary-os-put` | `~/.local/bin/` |
 | systemd unit | `deploy/mysql/*.service`, `*.timer` | `~/.config/systemd/user/` (oci-diary만) |
 | 캐시 설정 | | `~/.config/diary.env`의 `CLOUDFLARE_ZONE_ID`, Secret Manager `diary-cloudflare-api-token`(Zone → Cache Purge 권한만) |
-| 앱 DB 비밀값 | | 비밀번호는 Secret Manager `diary-db-password`, URL과 사용자명은 `~/.config/diary.env`. 계정 생성용 `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, 두 서버) |
+| 앱 DB 비밀값 | | 비밀번호는 Secret Manager `diary-db-password`, URL과 사용자명은 `~/.config/diary.env`. 계정 생성과 백업용 `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, oci-diary에만 둔다. 스크립트가 거기서만 돈다) |
 | HeatWave 관리자 | | oci-diary `~/.config/heatwave-admin.env` (`MYSQL_ADMIN_USERNAME/PASSWORD`) |
 | Object Storage 키 | | `~/.config/diary-objectstorage.env` (두 서버) |
 | Slack webhook | | 앱은 Secret Manager `diary-slack-webhook-url`, 백업 알림은 oci-diary `~/.config/diary-backup.env`의 `SLACK_WEBHOOK_URL` |
@@ -81,7 +81,7 @@ ssh oci-diary 'chmod 755 ~/.local/bin/diary-mysql-backup.new && mv ~/.local/bin/
 ```
 
 ### 앱 계정을 처음 만들 때 (DB 시스템을 새로 만들었을 때)
-관리자 env(`heatwave-admin.env`)를 oci-diary에 두고 `diary-mysql-setup`을 실행한다. `mydb`와 `diary_app`을 만들고, 정책에 맞는 비밀번호를 만들어 `~/.config/diary-app-db.env`에 쓴다(출력하지 않는다). 그 값을 두 서버의 `diary.env`에도 넣는다. 비밀번호 정책은 대문자, 소문자, 숫자, 특수문자를 모두 요구한다.
+관리자 env(`heatwave-admin.env`)를 oci-diary에 두고 `diary-mysql-setup`을 실행한다. `mydb`와 `diary_app`을 만들고, 정책에 맞는 비밀번호를 만들어 `~/.config/diary-app-db.env`에 쓴다(출력하지 않는다). 그 값 중 비밀번호는 Secret Manager `diary-db-password`의 새 버전으로 넣고, URL과 사용자명은 두 서버의 `diary.env`에 넣는다. 비밀번호 정책은 대문자, 소문자, 숫자, 특수문자를 모두 요구한다.
 
 ## 3. 앱 배포
 
@@ -177,6 +177,8 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 - quadlet의 `Exec=` 값에 공백이나 `\ `를 넣으면 unit 파일 구조가 깨진다
 
 ## 8. 무료 조건에서 주의할 것
+
+- **GCP Secret Manager 무료는 활성 버전 6개까지**다(`disabled`도 활성으로 센다. 현재 시크릿 3개 × 버전 1개). 이 GCP 프로젝트는 결제가 켜져 있어서 넘으면 청구된다. 값을 바꾸면 새 버전을 넣고 쓰던 옛 버전을 바로 `gcloud secrets versions destroy <N> --secret=<이름> --project key-decorator-356314`로 지운다(값을 바꾸기 전에 길이 확인: `... versions access latest ... | wc -c`)
 
 - OCI Always Free 컴퓨팅은 **7일 동안 CPU와 네트워크 사용률(95번째 백분위)이 모두 20% 미만이면 회수 대상**이다. 이 앱은 사용률이 낮아 해당될 수 있다
 - 춘천 리전은 Always Free A1(Arm) 인스턴스를 만들 수 없다
