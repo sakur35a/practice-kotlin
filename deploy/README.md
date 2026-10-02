@@ -21,7 +21,7 @@ OCI Always Free VM 두 대에서 diary 앱을 돌리고, DB는 OCI HeatWave MySQ
                                                                        └─ 10.0.0.19:18080  (oci-diary-2 앱) ┴─ JDBC(TLS) → HeatWave MySQL 10.0.1.93
 ```
 
-- **haproxy**: 두 앱을 roundrobin으로 본다. `OPTIONS /diary`가 200이 아니면 5초 안에 제외하고, 실패한 요청은 다른 앱으로 재시도한다. 두 서버가 같은 `haproxy.cfg`를 쓴다.
+- **haproxy**: 두 앱을 roundrobin으로 본다. `OPTIONS /diary`가 200이 아니면 5초 안에 제외하고, 실패한 요청은 다른 앱으로 재시도한다. 단 POST는 연결 실패만 재시도한다(응답이 실패한 POST를 다시 보내면 중복 저장될 수 있다). 두 서버가 같은 `haproxy.cfg`를 쓴다.
 - **앱**: 컨테이너 `diary-app` (`--memory=512m`). 호스트에 `127.0.0.1:18080`, 사설 IP`:18080`(상대 haproxy용), `127.0.0.1:18090`(Actuator)으로 열린다. JPA(Hibernate) + Flyway로 `mydb.diaries`를 쓴다.
 - **HeatWave MySQL**: DB 시스템 `mysql20261001232543`, 데이터베이스 `mydb`, 앱 계정 `diary_app`(TLS 필수, `mydb.*`만 권한).
 
@@ -91,7 +91,7 @@ ssh oci-diary 'chmod 755 ~/.local/bin/diary-mysql-backup.new && mv ~/.local/bin/
 git tag v0.0.23 && git push origin v0.0.23
 ```
 
-- 서버에서는 `start.sh`와 `deploy.sh`, `haproxy.cfg`를 올리고 haproxy를 재시작한 뒤 `deploy.sh <이미지>`를 실행한다. 새 컨테이너가 health check(`/diary`)를 통과하지 못하면 이전 컨테이너로 되돌린다. 배포 뒤 최신 3개 버전 태그만 남기고 이전 이미지를 지운다
+- 서버에서는 `start.sh`와 `deploy.sh`, `haproxy.cfg`를 올리고 `deploy.sh <이미지>`를 실행한다. `deploy.sh`는 먼저 haproxy 설정을 검사하고(틀리면 앱을 건드리지 않고 멈춘다) 재시작 없이 reload(SIGHUP)한다. 설정 파일은 제자리에서 덮어써야 한다(`scp`, `cat >`). `mv`로 바꾸면 컨테이너가 옛 파일을 본다. 새 컨테이너가 health check(`/diary`)를 통과하지 못하면 이전 컨테이너로 되돌린다. 배포 뒤 최신 3개 버전 태그만 남기고 이전 이미지를 지운다
 - 두 서버를 차례로 하므로 한쪽이 재시작하는 동안 다른 쪽이 받는다
 - `start.sh`는 `~/.config/diary-gcp-sa.json`(Secret Manager 서비스 계정 키)이 없으면 실패한다. DB 비밀번호, Slack webhook, Cloudflare 토큰은 `diary-db-password`, `diary-slack-webhook-url`, `diary-cloudflare-api-token` 시크릿에서 읽고 서버 `diary.env`에는 두지 않는다. 키 파일은 `644`, `~/.config`는 `700`이어야 한다(컨테이너 앱 uid가 읽어야 하고, 600이면 기동이 Permission denied로 실패한다)
 - 앱 이미지가 바뀌지 않는 변경(`haproxy.cfg`, `deploy/mysql/*`)은 태그가 필요 없다. 서버에 직접 올린다

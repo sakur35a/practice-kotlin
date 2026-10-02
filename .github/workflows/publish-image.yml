@@ -135,7 +135,7 @@ jobs:
         run: |
           for host in "$OCI_HOST" "$OCI_HOST_2"; do
             ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$host" \
-              "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && podman restart haproxy >/dev/null && /home/$OCI_USER/deploy.sh '$IMAGE'"
+              "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
           done
 
       - name: Verify public API
