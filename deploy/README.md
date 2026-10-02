@@ -62,11 +62,11 @@ SPRING_DATASOURCE_PASSWORD=...
 | 백업/계정 스크립트 | `deploy/mysql/diary-mysql-*` | `~/.local/bin/` |
 | Object Storage 도구 | `deploy/diary-os-put` | `~/.local/bin/` |
 | systemd unit | `deploy/mysql/*.service`, `*.timer` | `~/.config/systemd/user/` (oci-diary만) |
-| 캐시 설정 | | `~/.config/diary.env`의 `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN`(Zone → Cache Purge 권한만) |
-| 앱 DB 비밀값 | | `~/.config/diary.env`, `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, 두 서버) |
+| 캐시 설정 | | `~/.config/diary.env`의 `CLOUDFLARE_ZONE_ID`, Secret Manager `diary-cloudflare-api-token`(Zone → Cache Purge 권한만) |
+| 앱 DB 비밀값 | | 비밀번호는 Secret Manager `diary-db-password`, URL과 사용자명은 `~/.config/diary.env`. 계정 생성용 `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, 두 서버) |
 | HeatWave 관리자 | | oci-diary `~/.config/heatwave-admin.env` (`MYSQL_ADMIN_USERNAME/PASSWORD`) |
 | Object Storage 키 | | `~/.config/diary-objectstorage.env` (두 서버) |
-| Slack webhook | | `~/.bashrc`의 `SLACK_WEBHOOK_URL`, 백업용 `~/.config/diary-backup.env` |
+| Slack webhook | | 앱은 Secret Manager `diary-slack-webhook-url`, 백업 알림은 oci-diary `~/.config/diary-backup.env`의 `SLACK_WEBHOOK_URL` |
 | 백업 이벤트 로그 | | oci-diary `~/.local/state/diary-mysql/events.jsonl` |
 | 로컬 백업 | | oci-diary `~/mysql-backups/` (최신 3개) |
 
