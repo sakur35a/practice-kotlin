@@ -137,6 +137,7 @@ DB 시스템이 사라졌다면: 콘솔에서 새 HeatWave Always Free를 만들
 ## 5. 메모리와 꺼 둔 것들
 
 - **JVM AOT 캐시**: 이미지를 만들 때(`bootBuildImage`) 빌드 안에서 앱을 한 번 띄워(`application-training.yaml`, DB 없이) 클래스 로딩 결과를 `application.aot`로 이미지에 담고, `start.sh`의 `BPL_JVM_AOTCACHE_ENABLED=true`로 쓴다. 로컬 비교에서 기동 3.3초 → 1.8초(-46%), 메모리도 약간 줄었다. 캐시를 못 읽으면 JVM은 캐시 없이 기동한다. 이미지는 약 140MB 커진다. 끄려면 `start.sh`에서 이 변수를 지운다
+- **AOT 캐시 재배치 끄기(`-XX:ArchiveRelocationMode=0`)**: JDK는 AOT 캐시를 로드할 때 기본으로 주소를 재배치해서, 파일 매핑이어야 할 약 40MB가 익명 메모리로 복사된다. 끄면 JVM 익명 메모리가 196MB에서 157MB로 줄고(RSS 총량은 같고 40MB가 되돌릴 수 있는 파일 매핑이 된다) 호스트 가용 메모리가 약 40MB 늘며 기동도 약간 빨라졌다(oci-diary 서버에서 2회씩 비교). 아카이브가 고정 주소에 올라가서 그 영역의 ASLR 무작위화가 약해지는 대가가 있고, 고정 주소에 못 올리면 JVM이 알아서 재배치로 되돌아간다
 - **MetaspaceSize 128M**: 메타스페이스 사용량(약 110MB)이 96M 기준을 넘으면 기동 중 `Metadata GC Threshold` Full GC(300~800ms)가 한 번 났다. 128M은 Full GC 0회이고 메모리 차이는 없었다(oci-diary에서 2회씩 비교)
 
 1GB 서버에서 가용 메모리는 평소 약 350MB 이상이다(DB가 외부로 빠져 PostgreSQL 몫이 없어졌다). 오래 걸리는 작업(`dnf`, 이미지 pull)은 한 번에 한 서버에서만 한다.
