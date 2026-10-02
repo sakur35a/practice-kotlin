@@ -1,7 +1,7 @@
 # 운영 가이드
 
 OCI Always Free VM 두 대에서 diary 앱을 돌리고, DB는 OCI HeatWave MySQL(Always Free)을 쓴다. 이 문서는 구조, 파일 위치, 자주 하는 작업(배포, 백업 복원, 정비)과 겪은 함정을 정리한다.
-비밀값(비밀번호, 키, webhook)은 repo에 두지 않고 서버의 env 파일에만 둔다.
+비밀값(비밀번호, 키, webhook)은 repo에 두지 않는다. 앱이 쓰는 값 3개는 OCI Vault에 있고 서버에는 env 파일(접속 URL, 사용자명, 백업용 값)만 둔다.
 
 ## 1. 구성
 
@@ -62,11 +62,11 @@ SPRING_DATASOURCE_PASSWORD=...
 | 백업/계정 스크립트 | `deploy/mysql/diary-mysql-*` | `~/.local/bin/` |
 | Object Storage 도구 | `deploy/diary-os-put` | `~/.local/bin/` |
 | systemd unit | `deploy/mysql/*.service`, `*.timer` | `~/.config/systemd/user/` (oci-diary만) |
-| 캐시 설정 | | `~/.config/diary.env`의 `CLOUDFLARE_ZONE_ID`, Secret Manager `diary-cloudflare-api-token`(Zone → Cache Purge 권한만) |
-| 앱 DB 비밀값 | | 비밀번호는 Secret Manager `diary-db-password`, URL과 사용자명은 `~/.config/diary.env`. 계정 생성과 백업용 `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, oci-diary에만 둔다. 스크립트가 거기서만 돈다) |
+| 캐시 설정 | | `~/.config/diary.env`의 `CLOUDFLARE_ZONE_ID`, OCI Vault `diary-cloudflare-api-token`(Zone → Cache Purge 권한만) |
+| 앱 DB 비밀값 | | 비밀번호는 OCI Vault `diary-db-password`, URL과 사용자명은 `~/.config/diary.env`. 계정 생성과 백업용 `~/.config/diary-app-db.env`(`APP_DB_HOST/NAME/USER/PASSWORD`, oci-diary에만 둔다. 스크립트가 거기서만 돈다) |
 | HeatWave 관리자 | | oci-diary `~/.config/heatwave-admin.env` (`MYSQL_ADMIN_USERNAME/PASSWORD`) |
 | Object Storage 키 | | `~/.config/diary-objectstorage.env` (두 서버) |
-| Slack webhook | | 앱은 Secret Manager `diary-slack-webhook-url`, 백업 알림은 oci-diary `~/.config/diary-backup.env`의 `SLACK_WEBHOOK_URL` |
+| Slack webhook | | 앱은 OCI Vault `diary-slack-webhook-url`, 백업 알림은 oci-diary `~/.config/diary-backup.env`의 `SLACK_WEBHOOK_URL` |
 | 백업 이벤트 로그 | | oci-diary `~/.local/state/diary-mysql/events.jsonl` |
 | 로컬 백업 | | oci-diary `~/mysql-backups/` (최신 3개) |
 
@@ -81,7 +81,7 @@ ssh oci-diary 'chmod 755 ~/.local/bin/diary-mysql-backup.new && mv ~/.local/bin/
 ```
 
 ### 앱 계정을 처음 만들 때 (DB 시스템을 새로 만들었을 때)
-관리자 env(`heatwave-admin.env`)를 oci-diary에 두고 `diary-mysql-setup`을 실행한다. `mydb`와 `diary_app`을 만들고, 정책에 맞는 비밀번호를 만들어 `~/.config/diary-app-db.env`에 쓴다(출력하지 않는다). 그 값 중 비밀번호는 Secret Manager `diary-db-password`의 새 버전으로 넣고, URL과 사용자명은 두 서버의 `diary.env`에 넣는다. 비밀번호 정책은 대문자, 소문자, 숫자, 특수문자를 모두 요구한다.
+관리자 env(`heatwave-admin.env`)를 oci-diary에 두고 `diary-mysql-setup`을 실행한다. `mydb`와 `diary_app`을 만들고, 정책에 맞는 비밀번호를 만들어 `~/.config/diary-app-db.env`에 쓴다(출력하지 않는다). 그 값 중 비밀번호는 OCI Vault `diary-db-password`의 새 버전으로(콘솔 또는 `oci vault secret update-base64`) 넣고, URL과 사용자명은 두 서버의 `diary.env`에 넣는다. 비밀번호 정책은 대문자, 소문자, 숫자, 특수문자를 모두 요구한다.
 
 ## 3. 앱 배포
 
@@ -93,7 +93,7 @@ git tag v0.0.23 && git push origin v0.0.23
 
 - 서버에서는 `start.sh`와 `deploy.sh`, `haproxy.cfg`를 올리고 `deploy.sh <이미지>`를 실행한다. `deploy.sh`는 먼저 haproxy 설정을 검사하고(틀리면 앱을 건드리지 않고 멈춘다) 재시작 없이 reload(SIGHUP)한다. 설정 파일은 제자리에서 덮어써야 한다(`scp`, `cat >`). `mv`로 바꾸면 컨테이너가 옛 파일을 본다. 새 컨테이너가 health check(`/diary`)를 통과하지 못하면 이전 컨테이너로 되돌린다. 배포 뒤 최신 3개 버전 태그만 남기고 이전 이미지를 지운다
 - 두 서버를 차례로 하므로 한쪽이 재시작하는 동안 다른 쪽이 받는다
-- `start.sh`는 `~/.config/diary-gcp-sa.json`(Secret Manager 서비스 계정 키)이 없으면 실패한다. DB 비밀번호, Slack webhook, Cloudflare 토큰은 `diary-db-password`, `diary-slack-webhook-url`, `diary-cloudflare-api-token` 시크릿에서 읽고 서버 `diary.env`에는 두지 않는다. 키 파일은 `644`, `~/.config`는 `700`이어야 한다(컨테이너 앱 uid가 읽어야 하고, 600이면 기동이 Permission denied로 실패한다)
+- `start.sh`는 배포 때 OCI Vault(`diary-vault`, 시크릿 `diary-db-password`, `diary-slack-webhook-url`, `diary-cloudflare-api-token`)에서 값을 가져와 컨테이너 환경변수로 넘긴다. 서버의 인스턴스 주체(동적 그룹 `diary-instances`, 정책 `diary-read-secrets`)로 인증하므로 키 파일이 없고, 가져오기는 공식 `ghcr.io/oracle/oci-cli` 이미지로 한다(약 1GB, 서버에 한 번 pull됨). 하나라도 못 가져오면 `deploy.sh`가 이전 컨테이너로 되돌린다. 값을 바꾸면 새 버전을 올린 뒤 재배포(재시작)해야 반영된다(앱은 시작할 때만 읽는다)
 - 앱 이미지가 바뀌지 않는 변경(`haproxy.cfg`, `deploy/mysql/*`)은 태그가 필요 없다. 서버에 직접 올린다
 - 스키마는 앱이 시작할 때 Flyway가 맞춘다(`V1__init.sql`). Hibernate는 `ddl-auto: validate`라 스키마가 다르면 시작하지 못한다
 
@@ -178,10 +178,10 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 
 ## 8. 무료 조건에서 주의할 것
 
-- **GCP Secret Manager 무료는 활성 버전 6개까지**다(`disabled`도 활성으로 센다. 현재 시크릿 3개 × 버전 1개). 이 GCP 프로젝트는 결제가 켜져 있어서 넘으면 청구된다. 값을 바꾸면 새 버전을 넣고 쓰던 옛 버전을 바로 `gcloud secrets versions destroy <N> --secret=<이름> --project key-decorator-356314`로 지운다(값을 바꾸기 전에 길이 확인: `... versions access latest ... | wc -c`)
+- **OCI Vault**: 소프트웨어 보호 키와 Default 볼트는 Always Free이고 시크릿은 150개까지 무료다. 시크릿 버전은 시크릿당 최대 40개(활성 20, 삭제 대기 20)다
 
 - OCI Always Free 컴퓨팅은 **7일 동안 CPU와 네트워크 사용률(95번째 백분위)이 모두 20% 미만이면 회수 대상**이다. 이 앱은 사용률이 낮아 해당될 수 있다
 - 춘천 리전은 Always Free A1(Arm) 인스턴스를 만들 수 없다
 - Object Storage 무료 한도는 20GB, 월 API 요청 5만 건이다. 백업은 하루 몇 건이라 여유가 크다
 - 모든 백업이 같은 OCI 계정 안에 있다. 계정이 회수되면 DB와 백업이 함께 사라진다
-- GCP는 2026-09-29에 모두 정리했다. 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
+- GCP는 2026-09-29에 정리했다(2026-10-03까지 Secret Manager 시크릿 3개만 남아 있었고 OCI Vault로 옮겼다). 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
