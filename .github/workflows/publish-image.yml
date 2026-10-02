@@ -95,6 +95,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install cloudflared
+        run: |
+          # 서버의 22번 포트는 인터넷에 닫혀 있다. Cloudflare Access SSH(서비스 토큰)로 터널을 통해 접속한다.
+          curl -fsSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/download/2026.9.3/cloudflared-linux-amd64
+          echo "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2  cloudflared" | sha256sum -c -
+          sudo install -m 755 cloudflared /usr/local/bin/cloudflared
+
       - name: Configure SSH
         env:
           OCI_HOST: ${{ secrets.OCI_HOST }}
@@ -114,27 +121,32 @@ jobs:
           printf '%s\n' "$OCI_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_oci"
           printf '%s\n' "$OCI_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
 
+          # 호스트 키는 기존 known_hosts(옛 접속 주소 기준)를 HostKeyAlias로 그대로 쓴다.
+          # 서비스 토큰은 cloudflared가 TUNNEL_SERVICE_TOKEN_ID/SECRET 환경변수로 읽는다.
+          {
+            printf 'Host oci1\n  HostName ssh1.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST" "$OCI_USER" "$HOME/.ssh/id_oci"
+            printf 'Host oci2\n  HostName ssh2.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST_2" "$OCI_USER" "$HOME/.ssh/id_oci"
+          } > "$HOME/.ssh/config"
+
       - name: Upload deployment scripts
         env:
-          OCI_HOST: ${{ secrets.OCI_HOST }}
-          OCI_HOST_2: ${{ secrets.OCI_HOST_2 }}
           OCI_USER: ${{ secrets.OCI_USER }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          for host in "$OCI_HOST" "$OCI_HOST_2"; do
-            scp -i "$HOME/.ssh/id_oci" \
-              deploy/start.sh deploy/deploy.sh deploy/haproxy.cfg \
-              "$OCI_USER@$host:/home/$OCI_USER/"
+          for host in oci1 oci2; do
+            scp deploy/start.sh deploy/deploy.sh deploy/haproxy.cfg "$host:/home/$OCI_USER/"
           done
 
       - name: Deploy image
         env:
           IMAGE: ${{ needs.publish.outputs.image }}
-          OCI_HOST: ${{ secrets.OCI_HOST }}
-          OCI_HOST_2: ${{ secrets.OCI_HOST_2 }}
           OCI_USER: ${{ secrets.OCI_USER }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          for host in "$OCI_HOST" "$OCI_HOST_2"; do
-            ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$host" \
+          for host in oci1 oci2; do
+            ssh "$host" \
               "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
           done
 
