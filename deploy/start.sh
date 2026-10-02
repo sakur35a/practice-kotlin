@@ -10,6 +10,8 @@ if [[ ! -r "$ENV_FILE" ]]; then
 fi
 
 # Secret Manager 접근용 서비스 계정 키 (읽기 전용으로 컨테이너에 마운트한다)
+# 컨테이너 안의 앱은 호스트 사용자와 다른 uid라서 파일이 644여야 읽는다(600이면 Permission denied로 기동 실패).
+# 대신 ~/.config를 700으로 두어 다른 계정은 접근하지 못하게 한다.
 readonly GCP_KEY_FILE="${GCP_KEY_FILE:-$HOME/.config/diary-gcp-sa.json}"
 if [[ ! -r "$GCP_KEY_FILE" ]]; then
   echo "Missing GCP service account key: $GCP_KEY_FILE" >&2

@@ -93,7 +93,7 @@ git tag v0.0.23 && git push origin v0.0.23
 
 - 서버에서는 `start.sh`와 `deploy.sh`, `haproxy.cfg`를 올리고 haproxy를 재시작한 뒤 `deploy.sh <이미지>`를 실행한다. 새 컨테이너가 health check(`/diary`)를 통과하지 못하면 이전 컨테이너로 되돌린다. 배포 뒤 최신 3개 버전 태그만 남기고 이전 이미지를 지운다
 - 두 서버를 차례로 하므로 한쪽이 재시작하는 동안 다른 쪽이 받는다
-- `start.sh`는 `~/.config/diary-gcp-sa.json`(Secret Manager 서비스 계정 키)이 없으면 실패한다. DB 비밀번호, Slack webhook, Cloudflare 토큰은 `diary-db-password`, `diary-slack-webhook-url`, `diary-cloudflare-api-token` 시크릿에서 읽고 서버 `diary.env`에는 두지 않는다
+- `start.sh`는 `~/.config/diary-gcp-sa.json`(Secret Manager 서비스 계정 키)이 없으면 실패한다. DB 비밀번호, Slack webhook, Cloudflare 토큰은 `diary-db-password`, `diary-slack-webhook-url`, `diary-cloudflare-api-token` 시크릿에서 읽고 서버 `diary.env`에는 두지 않는다. 키 파일은 `644`, `~/.config`는 `700`이어야 한다(컨테이너 앱 uid가 읽어야 하고, 600이면 기동이 Permission denied로 실패한다)
 - 앱 이미지가 바뀌지 않는 변경(`haproxy.cfg`, `deploy/mysql/*`)은 태그가 필요 없다. 서버에 직접 올린다
 - 스키마는 앱이 시작할 때 Flyway가 맞춘다(`V1__init.sql`). Hibernate는 `ddl-auto: validate`라 스키마가 다르면 시작하지 못한다
 
