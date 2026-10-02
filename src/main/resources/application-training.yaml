@@ -1,0 +1,19 @@
+# AOT 캐시 훈련 실행 전용. 이미지를 만들 때 DB 없이 컨텍스트만 한 번 올려서 클래스 로딩 결과를 캐시에 담는다.
+# 운영과 로컬에서는 쓰지 않는다 (build.gradle.kts의 TRAINING_RUN_JAVA_TOOL_OPTIONS).
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:1/none
+    hikari:
+      initialization-fail-timeout: -1
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        boot.allow_jdbc_metadata_access: false
+        dialect: org.hibernate.dialect.MySQLDialect
+diary:
+  warmup:
+    enabled: false

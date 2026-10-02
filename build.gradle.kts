@@ -80,6 +80,13 @@ tasks.named<BootBuildImage>("bootBuildImage") {
     imageName.set("$imageRepository:${project.version}")
     tags.set(listOf("$imageRepository:latest"))
     createdDate.set("now")
+    environment.set(
+        mapOf(
+            // 빌드 중 훈련 실행으로 JVM AOT 캐시를 만들어 이미지에 담는다 (기동 시간 단축)
+            "BP_JVM_AOTCACHE_ENABLED" to "true",
+            "TRAINING_RUN_JAVA_TOOL_OPTIONS" to "-XX:TieredStopAtLevel=1 -Dspring.profiles.active=training",
+        ),
+    )
     imagePlatform.set("linux/amd64")
 
     docker {

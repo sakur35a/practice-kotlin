@@ -34,9 +34,10 @@ podman run -d \
   -p 127.0.0.1:18090:8081 \
   -e BPL_JVM_THREAD_COUNT=50 \
   -e BPL_JVM_CLASS_ADJUSTMENT=125% \
+  -e BPL_JVM_AOTCACHE_ENABLED=true \
   -e SPRING_PROFILES_ACTIVE=prod \
   -v "$GCP_KEY_FILE:/secrets/gcp-sa.json:ro,Z" \
   -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json \
-  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=96M -Xss512k -Xlog:gc,gc+metaspace=info' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=128M -Xss512k -Xlog:gc,gc+metaspace=info' \
   --env-file "$ENV_FILE" \
   "$IMAGE"
