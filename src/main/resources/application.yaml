@@ -1,6 +1,11 @@
 spring:
   application:
     name: diary
+  cloud:
+    gcp:
+      secretmanager:
+        # 로컬과 테스트에서는 Secret Manager 클라이언트(gRPC 스레드, 클래스)를 만들지 않는다. prod에서만 켠다
+        enabled: false
   datasource:
     hikari:
       maximum-pool-size: 4

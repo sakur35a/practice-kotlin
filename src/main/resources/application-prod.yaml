@@ -5,6 +5,8 @@ spring:
   cloud:
     gcp:
       project-id: key-decorator-356314
+      secretmanager:
+        enabled: true
   datasource:
     password: ${sm@diary-db-password}
 slack:
