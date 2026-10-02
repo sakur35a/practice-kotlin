@@ -46,6 +46,15 @@ restore_previous_container() {
   fi
 }
 
+# haproxy.cfg는 CI가 제자리에서 덮어쓴다(scp). 유효할 때만 재시작 없이 다시 읽어서 진행 중인 요청을 끊지 않는다.
+# 설정이 틀렸으면 여기서 멈춘다(앱은 건드리지 않는다). 파일을 mv로 바꾸면 컨테이너가 옛 파일을 보므로 쓰지 않는다.
+if [[ "$(podman inspect --format '{{.State.Running}}' haproxy 2>/dev/null)" == "true" ]]; then
+  podman exec haproxy haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg >/dev/null
+  podman kill --signal HUP haproxy >/dev/null
+else
+  podman start haproxy >/dev/null
+fi
+
 podman pull "$IMAGE"
 
 if container_exists "$BACKUP_CONTAINER"; then

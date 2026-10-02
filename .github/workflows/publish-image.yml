@@ -135,14 +135,15 @@ jobs:
         run: |
           for host in "$OCI_HOST" "$OCI_HOST_2"; do
             ssh -i "$HOME/.ssh/id_oci" "$OCI_USER@$host" \
-              "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && podman restart haproxy >/dev/null && /home/$OCI_USER/deploy.sh '$IMAGE'"
+              "chmod 700 /home/$OCI_USER/start.sh /home/$OCI_USER/deploy.sh && /home/$OCI_USER/deploy.sh '$IMAGE'"
           done
 
       - name: Verify public API
         run: |
           # diary-6c6.pages.dev는 정적 프론트라 /api/diary가 HTML을 주므로 백엔드가 죽어도 통과한다.
           # 프론트가 실제로 호출하는 API 도메인을 확인하고, 응답이 JSON 목록인지도 본다.
+          # 엣지 캐시 적중(5분)만으로 통과하지 않도록 실행마다 다른 값을 붙여 항상 서버까지 가게 한다.
           curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors \
             --max-time 15 \
-            'https://api.ssobbs13.pp.ua/diary?size=1' \
+            'https://api.ssobbs13.pp.ua/diary?size=1&v=${{ github.run_id }}' \
             | grep -q '"items"'
