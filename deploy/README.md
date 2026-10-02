@@ -7,11 +7,13 @@ OCI Always Free VM 두 대에서 diary 앱을 돌리고, DB는 OCI HeatWave MySQ
 
 | | oci-diary | oci-diary-2 |
 |---|---|---|
-| 접속 | `ssh oci-diary` (opc) | `ssh oci-diary-2` (opc) |
+| 접속 | `ssh oci-diary` (opc, Access 경유) | `ssh oci-diary-2` (opc, Access 경유) |
 | 사설 IP | 10.0.0.108 | 10.0.0.19 |
 | hostname | `my-finance` | `my-finance-db` (옛 이름이 남아 있음) |
 | 추가 역할 | 매일 mysqldump 백업, HeatWave 관리자 env | |
 | 사양 | AMD micro 1/8 OCPU, RAM 1GB, swap 2.5GB, Oracle Linux 9 | 동일 |
+
+**SSH는 인터넷에 열려 있지 않다.** OCI 보안 목록에서 22번은 사설 대역(`10.0.0.0/24`)에서만 허용하고, 접속은 Cloudflare Access(`ssh1.ssobbs13.pp.ua`=oci-diary, `ssh2.ssobbs13.pp.ua`=oci-diary-2)를 거친다. 터널의 두 커넥터는 서버를 지정할 수 없어서, 두 서버의 haproxy가 같은 설정으로 loopback `2201`→oci-diary:22, `2202`→oci-diary-2:22를 사설망으로 중계한다. Access 앱 `diary-ssh`의 정책은 `owner`(본인 이메일 Allow)와 `github-deploy`(서비스 토큰 Service Auth)뿐이다. Mac의 `~/.ssh/config`에는 두 별칭에 `ProxyCommand cloudflared access ssh --hostname ssh1|2.ssobbs13.pp.ua`가 들어 있다. 로그인은 24시간 유효하고, 만료되면 `cloudflared access login https://ssh1.ssobbs13.pp.ua`로 이메일 PIN 로그인을 다시 한다. CI는 서비스 토큰(`CF_ACCESS_CLIENT_ID/SECRET`)으로 접속하고, 토큰이 거절되면 30초 안에 실패한다(`cloudflared`가 사람 로그인을 기다리며 멈추는 것을 막는다). 서버 쪽에서 모든 접속이 막히면 OCI 콘솔의 인스턴스 콘솔 연결(시리얼 콘솔)을 쓴다.
 
 리전 ap-chuncheon-1. VM 서브넷 10.0.0.0/24, HeatWave는 사설 서브넷 10.0.1.0/24(`10.0.1.93:3306`). 프론트(정적, Cloudflare Pages)는 `https://diary-6c6.pages.dev/`이고, 그 JS가 호출하는 API의 공개 진입점은 `https://api.ssobbs13.pp.ua/diary`이다(`pages.dev/api/diary`는 HTML을 주므로 API 확인에 쓰지 않는다).
 두 서버의 cloudflared가 같은 터널에 붙어 있고, 터널은 `api.ssobbs13.pp.ua`를 `http://127.0.0.1:8080`(haproxy)으로 넘긴다(설정은 Cloudflare 대시보드에서 관리하며, 서버에서는 `podman logs cloudflared`의 `Updated to new configuration`에서 볼 수 있다).
@@ -184,4 +186,4 @@ for h in oci-diary oci-diary-2; do ssh $h 'echo "== $(hostname)"; free -m | sed 
 - 춘천 리전은 Always Free A1(Arm) 인스턴스를 만들 수 없다
 - Object Storage 무료 한도는 20GB, 월 API 요청 5만 건이다. 백업은 하루 몇 건이라 여유가 크다
 - 모든 백업이 같은 OCI 계정 안에 있다. 계정이 회수되면 DB와 백업이 함께 사라진다
-- 앱은 2026-10-03부터 GCP를 쓰지 않는다(시크릿 3개는 OCI Vault로 옮겼다). GCP 프로젝트 `key-decorator-356314`는 앱과 무관해져서 삭제 대상이다. OCI Vault를 처음부터 다시 만들 때는 콘솔에서 Vault(Default), 소프트웨어 보호 AES-256 키, 시크릿 3개를 만들고, 동적 그룹 `diary-instances`(규칙 `Any {instance.id = '<oci-diary OCID>', instance.id = '<oci-diary-2 OCID>'}`)와 정책 `diary-read-secrets`(`Allow dynamic-group diary-instances to read secret-bundles in compartment id <컴파트먼트> where target.vault.id = '<Vault OCID>'`)를 만든 뒤 `start.sh`의 `VAULT_ID`를 새 값으로 바꾼다. 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
+- 앱은 2026-10-03부터 GCP를 쓰지 않는다(시크릿 3개는 OCI Vault로 옮겼다). GCP 프로젝트 `key-decorator-356314`는 2026-10-03에 삭제를 요청했다(30일 안에는 `gcloud projects undelete`로 복구할 수 있다). OCI Vault를 처음부터 다시 만들 때는 콘솔에서 Vault(Default), 소프트웨어 보호 AES-256 키, 시크릿 3개를 만들고, 동적 그룹 `diary-instances`(규칙 `Any {instance.id = '<oci-diary OCID>', instance.id = '<oci-diary-2 OCID>'}`)와 정책 `diary-read-secrets`(`Allow dynamic-group diary-instances to read secret-bundles in compartment id <컴파트먼트> where target.vault.id = '<Vault OCID>'`)를 만든 뒤 `start.sh`의 `VAULT_ID`를 새 값으로 바꾼다. 2026-10-01에 DB를 PostgreSQL(VM 두 대 복제)에서 HeatWave MySQL로 옮기고 PostgreSQL 구성(컨테이너, 볼륨, failover 감시, 백업, 5432 규칙, 버킷 `pg/`)을 모두 지웠다
