@@ -51,6 +51,6 @@ podman run -d \
   -e SPRING_DATASOURCE_PASSWORD \
   -e SLACK_WEBHOOK_URL \
   -e CLOUDFLARE_API_TOKEN \
-  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=128M -Xss512k -Xlog:gc,gc+metaspace=info' \
+  -e 'JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=96M -XX:MetaspaceSize=128M -Xss512k -XX:+UnlockDiagnosticVMOptions -XX:ArchiveRelocationMode=0 -Xlog:gc,gc+metaspace=info' \
   --env-file "$ENV_FILE" \
   "$IMAGE"
