@@ -123,9 +123,10 @@ jobs:
 
           # 호스트 키는 기존 known_hosts(옛 접속 주소 기준)를 HostKeyAlias로 그대로 쓴다.
           # 서비스 토큰은 cloudflared가 TUNNEL_SERVICE_TOKEN_ID/SECRET 환경변수로 읽는다.
+          # 토큰이 거절되면 cloudflared가 사람 로그인을 기다리며 멈추므로, 30초 안에 실패하게 한다.
           {
-            printf 'Host oci1\n  HostName ssh1.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST" "$OCI_USER" "$HOME/.ssh/id_oci"
-            printf 'Host oci2\n  HostName ssh2.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST_2" "$OCI_USER" "$HOME/.ssh/id_oci"
+            printf 'Host oci1\n  HostName ssh1.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  BatchMode yes\n  ConnectTimeout 30\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST" "$OCI_USER" "$HOME/.ssh/id_oci"
+            printf 'Host oci2\n  HostName ssh2.ssobbs13.pp.ua\n  HostKeyAlias %s\n  User %s\n  IdentityFile %s\n  BatchMode yes\n  ConnectTimeout 30\n  ProxyCommand cloudflared access ssh --hostname %%h\n' "$OCI_HOST_2" "$OCI_USER" "$HOME/.ssh/id_oci"
           } > "$HOME/.ssh/config"
 
       - name: Upload deployment scripts
