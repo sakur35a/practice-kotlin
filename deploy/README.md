@@ -48,7 +48,7 @@ SPRING_DATASOURCE_PASSWORD=...
 | 층 | 무엇을 | 얼마나 | 글을 쓰면 |
 |---|---|---|---|
 | Cloudflare 엣지 | `GET /diary*` 200 응답 | 목록 5분, 한 건 1일 (`Cloudflare-CDN-Cache-Control`) | 쓴 서버가 `Cache-Tag: diary-list`를 purge한다(API 토큰 필요) |
-| 브라우저 | ETag | 매번 확인(`Cache-Control: no-cache`), 같으면 304 | 새 ETag로 자연히 바뀐다 |
+| 브라우저 | ETag | 목록 첫 페이지는 매번 확인(`Cache-Control: no-cache`, 같으면 304). **상세와 커서로 가는 이전 페이지는 `max-age=86400, immutable`**이라 서버에 다시 묻지 않는다(일기는 만든 뒤 바뀌지 않는다) | 첫 페이지는 새 ETag로 자연히 바뀐다 |
 
 - purge는 **가상 스레드에서 비동기**로 실행한다(POST 응답을 막지 않고, DB 커밋 뒤에 나간다). 그래서 글을 쓴 직후 목록을 읽으면 purge가 끝나기 전의 옛 목록이 엣지에서 나올 수 있다(보통 1초 안쪽). purge가 실패하면 로그(`layer=cache action=edge_purge_failed`)만 남기고 글쓰기는 성공으로 둔다. 그 경우 TTL(5분) 뒤에 맞아진다. 앱 종료 때는 진행 중인 purge를 최대 5초 기다린다
 - 엣지 캐시는 Cloudflare **캐시 규칙**이 켜져 있어야 동작한다. 규칙: 호스트 `api.ssobbs13.pp.ua`, 경로가 `/diary`로 시작 → Eligible for cache, Edge TTL "Use cache-control header if present, bypass cache if not", Browser TTL "Respect origin". 404/5xx에는 캐시 헤더가 없어 캐시되지 않는다

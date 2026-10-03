@@ -120,6 +120,35 @@ class DiaryControllerTest {
     }
 
     @Test
+    fun `상세는 브라우저가 서버에 다시 묻지 않게 오래 캐시한다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.findById(diary.id)).thenReturn(diary)
+
+        mockMvc
+            .perform(get("/diary/${diary.id}"))
+            .andExpect(status().isOk)
+            .andExpect(header().string("Cache-Control", "max-age=86400, immutable"))
+            .andExpect(header().string("Cloudflare-CDN-Cache-Control", "max-age=86400"))
+    }
+
+    @Test
+    fun `목록의 첫 페이지는 매번 확인하고, 커서로 가는 이전 페이지는 오래 캐시한다`() {
+        val diary = Diary(title = "제목", content = "내용")
+        whenever(diaryService.findDiarySlice(any<CursorQuery>()))
+            .thenReturn(CursorSlice(items = listOf(diary), hasNext = false, nextCursorId = null))
+
+        mockMvc
+            .perform(get("/diary"))
+            .andExpect(header().string("Cache-Control", "no-cache"))
+
+        mockMvc
+            .perform(get("/diary?cursorId=${diary.id}"))
+            .andExpect(header().string("Cache-Control", "max-age=86400, immutable"))
+            .andExpect(header().string("Cloudflare-CDN-Cache-Control", "max-age=300"))
+            .andExpect(header().string("Cache-Tag", EdgeCache.LIST_TAG))
+    }
+
+    @Test
     fun `글을 쓰면 엣지 목록 purge를 요청한다`() {
         val diary = Diary(title = "제목", content = "내용")
         whenever(diaryService.createDiary(anyOrNull(), any(), any())).thenReturn(diary)
