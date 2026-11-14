@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# [일회성 데이터 이전 1/2] oci-diary에서 실행: HeatWave의 mydb.diaries를 파일로 내린다. 쓰기만 하지 않는다(읽기 전용).
+# HeatWave는 OCI VM에서만 닿는다 (옛 diary-mysql-backup과 같은 방식: podman의 mysql:8.4 컨테이너 + ~/.config/diary-app-db.env).
+#
+#   diary-export-heatwave [--out <디렉터리>] [--upload]
+#
+# 결과 (<디렉터리> 안, 모두 600):
+#   data.tsv      id_hex  created_at(UTC 마이크로초)  title_hex  content_hex   (탭 구분, 줄 하나가 한 행, 값은 모두 16진수)
+#   manifest.tsv  id_hex  sha256(정규 문자열)        (행 해시. MySQL이 계산한다. hoody의 verify가 PostgreSQL 쪽 값과 대조한다)
+#   meta.txt      건수, 시각, 문자셋 검사 결과
+#   SHA256SUMS    위 파일의 해시 (전송 중 손상 검사)
+# 그리고 한 파일로 묶은 diary-migrate-<시각>.tar.gz. --upload면 버킷의 migrate/ 아래에 올린다.
+#
+# 왜 16진수인가: binary(16) id와 mediumtext 본문(줄바꿈, 탭, 따옴표, 백슬래시, 이모지, 수 MB)을 SQL이나 이스케이프로
+# 옮기면 어딘가에서 한 글자가 바뀔 수 있다. 16진수 문자열은 어떤 도구를 거쳐도 그대로이고, 받는 쪽에서 바이트로 되돌린다.
+#
+# 쓰기 중인 DB를 읽으므로 컷오버의 쓰기 동결 구간(deploy/README.md)에서 실행한다.
+# 하나의 일관된 스냅샷(START TRANSACTION WITH CONSISTENT SNAPSHOT) 안에서 데이터와 행 해시를 함께 읽는다.
+#
+# 시험용 환경 변수 (기본값은 운영 방식):
+#   MYSQL_CMD   mysql 클라이언트를 부르는 명령. 기본 'podman run --rm -i -e MYSQL_PWD docker.io/library/mysql:8.4 mysql'
+#   MYSQL_SSL   --ssl-mode 값. 기본 REQUIRED
+#   APP_ENV     접속 정보 파일. 기본 ~/.config/diary-app-db.env
+set -Eeuo pipefail
+umask 077
+
+out=""
+upload=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --out) out="${2:?}"; shift 2 ;;
+    --upload) upload=1; shift ;;
+    *) echo "알 수 없는 인자: $1" >&2; exit 2 ;;
+  esac
+done
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+out="${out:-$HOME/diary-migrate/$ts}"
+mkdir -p "$out"
+
+# 접속 정보 파일은 셸로 실행하지 않고 값만 읽는다
+APP_ENV="${APP_ENV:-$HOME/.config/diary-app-db.env}"
+env_value() { awk -F= -v k="$1" '$1 == k {print substr($0, index($0, "=") + 1); exit}' "$APP_ENV"; }
+host="$(env_value APP_DB_HOST)"
+name="$(env_value APP_DB_NAME)"
+user="$(env_value APP_DB_USER)"
+MYSQL_PWD="$(env_value APP_DB_PASSWORD)"
+[[ -n "$host" && -n "$name" && -n "$user" && -n "$MYSQL_PWD" ]] || { echo "$APP_ENV 에 APP_DB_HOST/NAME/USER/PASSWORD가 필요하다" >&2; exit 1; }
+export MYSQL_PWD # 환경변수로만 넘긴다 (프로세스 인자에 드러나지 않는다)
+
+# 운영(Oracle Linux)에는 sha256sum이 있고, 로컬 시험(macOS)에는 shasum이 있다
+sha256_of() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+size_of() { wc -c <"$1" | tr -d ' '; }
+
+MYSQL_CMD="${MYSQL_CMD:-podman run --rm -i -e MYSQL_PWD docker.io/library/mysql:8.4 mysql}"
+MYSQL_SSL="${MYSQL_SSL:-REQUIRED}"
+# shellcheck disable=SC2086
+run_mysql() {
+  $MYSQL_CMD -h "$host" -u "$user" --ssl-mode="$MYSQL_SSL" --default-character-set=utf8mb4 \
+    --max-allowed-packet=1G --batch --skip-column-names --quick "$@"
+}
+
+echo "== 사전 점검"
+# 문자셋이 utf8mb4가 아니면 hex() 바이트가 UTF-8이 아니어서 PostgreSQL이 받지 못한다
+charsets="$(run_mysql -e "select concat(column_name, '=', character_set_name) from information_schema.columns where table_schema = '$name' and table_name = 'diaries' and character_set_name is not null order by column_name")"
+echo "$charsets"
+if [[ "$(grep -c '=utf8mb4$' <<<"$charsets")" != 2 ]]; then
+  echo "title/content가 utf8mb4가 아니다. 중단한다" >&2
+  exit 1
+fi
+# PostgreSQL text는 NUL 문자(U+0000)를 담지 못한다. MySQL에는 들어갈 수 있으므로 미리 센다
+# (바이너리로 바꿔서 센다: utf8mb4_0900_ai_ci는 NUL을 무시해서 문자열 비교로는 모든 행이 걸린다)
+nul_rows="$(run_mysql -e "select count(*) from $name.diaries where locate(char(0), convert(title using binary)) > 0 or locate(char(0), convert(content using binary)) > 0")"
+echo "NUL 문자가 든 행: $nul_rows"
+if [[ "$nul_rows" != 0 ]]; then
+  echo "NUL 문자가 든 행이 있어 PostgreSQL로 옮길 수 없다. 사람이 어떻게 할지 정한 뒤 다시 실행한다" >&2
+  exit 1
+fi
+
+echo "== 스냅샷 읽기"
+raw="$out/raw.out"
+run_mysql "$name" >"$raw" <<'SQL'
+start transaction with consistent snapshot;
+select '##DATA';
+select lower(hex(id)), date_format(created_at, '%Y-%m-%d %H:%i:%s.%f'), lower(hex(title)), lower(hex(content))
+  from diaries order by id;
+select '##MANIFEST';
+select lower(hex(id)),
+       sha2(concat_ws('|', lower(hex(id)), date_format(created_at, '%Y-%m-%d %H:%i:%s.%f'), lower(hex(title)), lower(hex(content))), 256)
+  from diaries order by id;
+select '##END';
+commit;
+SQL
+
+[[ "$(tail -n 1 "$raw")" == '##END' ]] || { echo "출력이 끝까지 오지 않았다" >&2; exit 1; }
+awk -v data="$out/data.tsv" -v manifest="$out/manifest.tsv" '
+  $0 == "##DATA" { target = data; next }
+  $0 == "##MANIFEST" { target = manifest; next }
+  $0 == "##END" { next }
+  target { print > target }
+' "$raw"
+rm -f "$raw"
+touch "$out/data.tsv" "$out/manifest.tsv" # 행이 0개여도 파일은 있게 한다
+
+rows="$(wc -l <"$out/data.tsv" | tr -d ' ')"
+manifest_rows="$(wc -l <"$out/manifest.tsv" | tr -d ' ')"
+[[ "$rows" == "$manifest_rows" ]] || { echo "데이터 $rows 행, 해시 $manifest_rows 행: 어긋난다" >&2; exit 1; }
+
+# 내려받은 파일이 MySQL이 계산한 해시와 같은지 다시 계산해 본다 (mysql 클라이언트와 파이프를 거치며 바뀌지 않았다는 증거)
+python3 - "$out/data.tsv" "$out/manifest.tsv" <<'PY'
+import hashlib, sys
+data, manifest = sys.argv[1:3]
+expected = dict(line.rstrip("\n").split("\t") for line in open(manifest))
+n = 0
+for line in open(data):
+    id_hex, created, title_hex, content_hex = line.rstrip("\n").split("\t")
+    got = hashlib.sha256("|".join([id_hex, created, title_hex, content_hex]).encode()).hexdigest()
+    if expected.get(id_hex) != got:
+        sys.exit(f"행 해시가 어긋난다: {id_hex}")
+    n += 1
+if n != len(expected):
+    sys.exit("행 수가 어긋난다")
+print(f"파일 안의 {n}행이 MySQL이 계산한 해시와 같다")
+PY
+
+{
+  echo "exported_at_utc=$ts"
+  echo "source_host=$host"
+  echo "rows=$rows"
+  echo "nul_rows=$nul_rows"
+  echo "charsets=$(tr '\n' ' ' <<<"$charsets")"
+} >"$out/meta.txt"
+for f in data.tsv manifest.tsv meta.txt; do printf '%s  %s\n' "$(sha256_of "$out/$f")" "$f"; done >"$out/SHA256SUMS"
+
+archive="$out/diary-migrate-$ts.tar.gz"
+tar -C "$out" -czf "$archive" data.tsv manifest.tsv meta.txt SHA256SUMS
+echo "== 끝: $rows 행, $(size_of "$out/data.tsv") bytes (data.tsv)"
+echo "파일: $archive"
+echo "sha256: $(sha256_of "$archive")"
+
+if ((upload)); then
+  ~/.local/bin/diary-os-put put "$archive" "migrate/$(basename "$archive")"
+  echo "업로드함: migrate/$(basename "$archive") (이전이 끝나면 지운다)"
+fi

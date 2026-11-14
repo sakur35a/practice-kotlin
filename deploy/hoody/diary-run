@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# diary.service가 실행한다. 현재 릴리스(/opt/diary/current)를 JVM으로 띄운다.
+set -Eeuo pipefail
+
+# shellcheck source=/dev/null
+source /opt/diary/bin/diary-jvm.conf
+
+# AOT 캐시는 훈련 때의 클래스 경로와 같은 경로에서만 쓸 수 있다. 심볼릭 링크가 아니라 실제 경로로 실행한다.
+release="$(readlink -f /opt/diary/current)"
+if [[ ! -r "$release/app/diary.jar" ]]; then
+  echo "릴리스가 없다: $release" >&2
+  exit 1
+fi
+
+aot=()
+# 캐시가 없거나 깨졌으면 캐시 없이 뜬다 (JVM이 경고만 내고 계속한다)
+[[ -r "$release/app/diary.aot" ]] && aot=("-XX:AOTCache=$release/app/diary.aot")
+
+# 127.0.0.1에만 연다: 밖에서는 같은 컴퓨터의 cloudflared만 닿는다. 환경 파일이 실수로 바꾸지 못하도록 명령행 인자(가장 우선)로 고정한다.
+# JAVA_OPTS_EXTRA는 /etc/diary/diary.env에서 일시적으로 플래그를 더할 때 쓴다 (예: -Xmx768m)
+# shellcheck disable=SC2086
+exec /usr/bin/java "${JVM_FLAGS[@]}" "${aot[@]}" ${JAVA_OPTS_EXTRA:-} \
+  -jar "$release/app/diary.jar" \
+  --server.address=127.0.0.1 \
+  --management.server.address=127.0.0.1

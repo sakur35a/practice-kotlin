@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily diary PostgreSQL backup
+
+[Timer]
+# 컴퓨터 한 대가 CPU 2코어를 나눠 쓰므로 한국 새벽(03:30)에 돈다
+OnCalendar=*-*-* 18:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,6 @@
+# 로컬 개발용. compose.yml의 PostgreSQL에 붙는다
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/mydb?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&rewriteBatchedStatements=true
-    username: myuser
-    password: mypassword
+    url: jdbc:postgresql://localhost:5432/diary?ApplicationName=diary
+    username: diary
+    password: diary

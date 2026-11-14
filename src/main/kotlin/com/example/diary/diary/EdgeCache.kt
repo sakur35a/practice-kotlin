@@ -3,7 +3,6 @@ package com.example.diary.diary
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
@@ -18,17 +17,12 @@ import java.util.concurrent.TimeUnit
 // purge가 끝나기 전의 옛 목록이 엣지에서 나올 수 있다(보통 1초 안쪽). purge가 실패해도 EDGE_LIST_TTL 뒤에는 맞아진다.
 @Component
 class EdgeCache internal constructor(
-    private val zoneId: String,
-    private val apiToken: String,
+    private val cloudflare: DiaryProperties.Cloudflare,
     private val http: RestClient,
 ) {
     @Autowired
-    constructor(
-        @Value("\${diary.cloudflare.zone-id:}") zoneId: String,
-        @Value("\${diary.cloudflare.api-token:}") apiToken: String,
-    ) : this(
-        zoneId,
-        apiToken,
+    constructor(properties: DiaryProperties) : this(
+        properties.cloudflare,
         RestClient
             .builder()
             .requestFactory(
@@ -37,18 +31,17 @@ class EdgeCache internal constructor(
             ).build(),
     )
 
-    private val log = LoggerFactory.getLogger(javaClass)
     private val executor = Executors.newVirtualThreadPerTaskExecutor()
 
     // 글이 커밋된 뒤에 부른다. 커밋 전에 비우면 그사이 엣지가 옛 목록을 다시 저장한다.
     fun purgeList() {
-        if (zoneId.isBlank() || apiToken.isBlank()) return
+        if (cloudflare.zoneId.isBlank() || cloudflare.apiToken.isBlank()) return
         executor.execute {
             runCatching {
                 http
                     .post()
-                    .uri("https://api.cloudflare.com/client/v4/zones/{zone}/purge_cache", zoneId)
-                    .header("Authorization", "Bearer $apiToken")
+                    .uri("https://api.cloudflare.com/client/v4/zones/{zone}/purge_cache", cloudflare.zoneId)
+                    .header("Authorization", "Bearer ${cloudflare.apiToken}")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body("""{"tags":["$LIST_TAG"]}""")
                     .retrieve()
@@ -65,6 +58,8 @@ class EdgeCache internal constructor(
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(EdgeCache::class.java)
+
         const val LIST_TAG = "diary-list"
         val LIST_TTL: Duration = Duration.ofMinutes(5)
         val DIARY_TTL: Duration = Duration.ofDays(1)

@@ -9,8 +9,6 @@ import org.springframework.web.filter.OncePerRequestFilter
 
 @Component
 class RequestLoggingFilter : OncePerRequestFilter() {
-    private val requestLogger = LoggerFactory.getLogger(javaClass)
-
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
@@ -29,5 +27,10 @@ class RequestLoggingFilter : OncePerRequestFilter() {
                 (System.nanoTime() - startedAt) / 1_000_000,
             )
         }
+    }
+
+    // 상위 클래스(GenericFilterBean)에 이미 logger 필드가 있어서 다른 이름을 쓴다
+    private companion object {
+        private val requestLogger = LoggerFactory.getLogger(RequestLoggingFilter::class.java)
     }
 }

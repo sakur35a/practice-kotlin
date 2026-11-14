@@ -2,6 +2,9 @@ package com.example.diary.diary
 
 import com.example.diary.pagination.CursorQuery
 import com.example.diary.pagination.CursorSlice
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import org.springframework.http.CacheControl
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CrossOrigin
@@ -10,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.net.URI
 import java.time.Duration
@@ -24,23 +28,35 @@ class DiaryController(
 ) {
     // 첫 페이지는 새 글이 맨 위에 붙어서 바뀌므로 브라우저가 매번 확인한다. 커서로 가는 이전 페이지는 만든 뒤 바뀌지 않는다.
     @GetMapping
-    fun getDiaryPreviews(cursorQuery: CursorQuery): ResponseEntity<CursorSlice<DiaryPreviewResponse>> =
-        cacheable(EdgeCache.LIST_TTL, if (cursorQuery.cursorId == null) CacheControl.noCache() else IMMUTABLE)
+    fun getDiaryPreviews(
+        @RequestParam(required = false) cursorId: UUID?,
+        // 범위는 CursorQuery(도메인)와 같다. 벗어나면 Spring의 메서드 검증이 컨트롤러에 들어오기 전에 400(validation-error)으로 거른다
+        @RequestParam(defaultValue = "${CursorQuery.DEFAULT_SIZE}")
+        @Min(CursorQuery.MIN_SIZE.toLong(), message = "must be at least {value}")
+        @Max(CursorQuery.MAX_SIZE.toLong(), message = "must be at most {value}")
+        size: Int,
+    ): ResponseEntity<CursorSlice<DiaryPreviewResponse>> {
+        val cursorQuery = CursorQuery(cursorId, size)
+
+        return cacheable(EdgeCache.LIST_TTL, if (cursorQuery.cursorId == null) CacheControl.noCache() else IMMUTABLE)
             .header("Cache-Tag", EdgeCache.LIST_TAG)
             .body(diaryService.findDiarySlice(cursorQuery).mapItems(::DiaryPreviewResponse))
+    }
 
     @GetMapping("/{id}")
     fun getDiary(
         @PathVariable id: UUID,
     ): ResponseEntity<DiaryResponse> =
         diaryService.findById(id)?.let { cacheable(EdgeCache.DIARY_TTL, IMMUTABLE).body(DiaryResponse(it)) }
-            ?: ResponseEntity.notFound().build()
+            ?: throw DiaryNotFoundException()
 
     @PostMapping
     fun createDiaries(
-        @RequestBody request: DiaryCreateRequest,
+        @RequestBody @Valid request: DiaryCreateRequest,
     ): ResponseEntity<DiaryResponse> {
-        val createdDiary = diaryService.createDiary(request.id, request.title, request.content)
+        // @Valid를 통과했으므로 title과 content는 null일 수 없다 (DiaryCreateRequest)
+        val createdDiary =
+            diaryService.createDiary(request.id, checkNotNull(request.title), checkNotNull(request.content))
         edgeCache.purgeList()
 
         return ResponseEntity.created(URI.create("/diary/${createdDiary.id}")).body(DiaryResponse(createdDiary))

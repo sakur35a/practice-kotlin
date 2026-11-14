@@ -59,6 +59,18 @@ class DiaryDomainTest {
         }
 
         @Test
+        fun `제목은 코드 포인트로 255자를 넘으면 거부한다`() {
+            Diary(title = "😀".repeat(255), content = "내용") // UTF-16으로는 510칸이지만 255자다
+            assertFailsWith<IllegalArgumentException> { Diary(title = "😀".repeat(256), content = "내용") }
+        }
+
+        @Test
+        fun `제목과 본문에 NUL 문자가 있으면 거부한다`() {
+            assertFailsWith<IllegalArgumentException> { Diary(title = "a\u0000b", content = "내용") }
+            assertFailsWith<IllegalArgumentException> { Diary(title = "제목", content = "a\u0000b") }
+        }
+
+        @Test
         fun `UUID v7이 아닌 ID는 거부한다`() {
             assertFailsWith<IllegalArgumentException> {
                 Diary(id = UUID.randomUUID(), title = "제목", content = "내용")

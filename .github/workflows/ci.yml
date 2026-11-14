@@ -1,10 +1,8 @@
 name: CI
 
+# main에 올라온 뒤의 검사와 배포는 deploy.yml이 한다. 이 워크플로는 PR만 본다.
 on:
   pull_request:
-    branches:
-      - main
-  push:
     branches:
       - main
 
@@ -28,5 +26,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      # Testcontainers가 PostgreSQL 17 컨테이너를 띄운다 (ubuntu-latest에 Docker가 있다)
       - name: Run checks
         run: ./gradlew check

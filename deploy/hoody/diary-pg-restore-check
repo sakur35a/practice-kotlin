@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# 백업 파일이 실제로 복원되는지, 운영 DB와 내용이 같은지 확인한다. 운영 DB diary는 읽기만 한다.
+# 같은 PostgreSQL 안에 임시 DB(diary_restorecheck)를 만들어 복원하고 끝나면 지운다. 다른 DB(cheotmadi 등)는 건드리지 않는다.
+#
+#   diary-pg-restore-check                 가장 최근 로컬 백업
+#   diary-pg-restore-check --os            버킷(diary-pg/)의 가장 최근 백업을 내려받아서
+#   diary-pg-restore-check /경로/파일.dump
+#
+# 확인하는 것: pg_restore 성공 / 복원본의 행 수 / 복원본의 모든 행이 운영 DB에 같은 내용(행 해시)으로 있는지.
+# 일기는 만든 뒤 바뀌지 않으므로 백업 뒤에 쓴 새 글만 운영에 더 있어야 하고, 다른 행이 있으면 실패다.
+source /opt/diary/bin/diary-pg-lib.sh
+set -e
+
+readonly CHECK_DB=diary_restorecheck
+pg() { runuser -u postgres -- psql -X -q -At -v ON_ERROR_STOP=1 "$@"; }
+
+work="$(mktemp -d)"
+cleanup() { pg -d postgres -c "drop database if exists $CHECK_DB" >/dev/null 2>&1 || true; rm -rf "$work"; }
+trap cleanup EXIT
+chmod 755 "$work"
+
+case "${1:-}" in
+  --os)
+    key="$("$OS_TOOL" list "$OS_PREFIX" | tail -n 1 | awk '{print $3}')"
+    [[ -n "$key" ]] || { echo "버킷에 $OS_PREFIX 백업이 없다" >&2; exit 1; }
+    "$OS_TOOL" get "$key" "$work/restore.dump"
+    dump="$work/restore.dump"
+    ;;
+  "")
+    dump="$(ls -1t "$BACKUP_DIR"/diary-*.dump | head -n 1)"
+    ;;
+  *)
+    dump="$1"
+    ;;
+esac
+[[ -r "$dump" ]] || { echo "읽을 수 없다: $dump" >&2; exit 1; }
+cp "$dump" "$work/restore.dump"
+chmod 644 "$work/restore.dump"
+echo "복원 대상: $dump ($(stat -c %s "$dump") bytes)"
+
+pg -d postgres -c "drop database if exists $CHECK_DB" -c "create database $CHECK_DB encoding 'UTF8' locale 'C.UTF-8' template template0"
+runuser -u postgres -- pg_restore --no-owner --exit-on-error -d "$CHECK_DB" "$work/restore.dump"
+
+restored="$work/restored.hash"
+live="$work/live.hash"
+pg -d "$CHECK_DB" -f "$ROW_HASH_SQL_FILE" | LC_ALL=C sort >"$restored"
+pg -d diary -f "$ROW_HASH_SQL_FILE" | LC_ALL=C sort >"$live"
+
+n_restored="$(wc -l <"$restored" | tr -d ' ')"
+n_live="$(wc -l <"$live" | tr -d ' ')"
+only_restored="$(LC_ALL=C comm -23 "$restored" "$live" | wc -l | tr -d ' ')"
+only_live="$(LC_ALL=C comm -13 "$restored" "$live" | wc -l | tr -d ' ')"
+echo "복원본 $n_restored 행, 운영 $n_live 행, 복원본에만 있거나 내용이 다른 행 $only_restored, 운영에만 있는 행 $only_live (백업 뒤의 새 글)"
+
+if [[ "$only_restored" != 0 ]]; then
+  log_event restore_check_failed file="$(basename "$dump")" restored="$n_restored" live="$n_live" mismatched="$only_restored"
+  echo "실패: 복원본에 운영과 다른 행이 있다" >&2
+  exit 1
+fi
+log_event restore_check_ok file="$(basename "$dump")" restored="$n_restored" live="$n_live" newer_in_live="$only_live"
+echo "정상"

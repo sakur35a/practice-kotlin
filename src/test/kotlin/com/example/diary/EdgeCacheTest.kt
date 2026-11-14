@@ -1,5 +1,6 @@
 package com.example.diary
 
+import com.example.diary.diary.DiaryProperties
 import com.example.diary.diary.EdgeCache
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpMethod
@@ -35,7 +36,7 @@ class EdgeCacheTest {
             .andExpect(header("Authorization", "Bearer token1"))
             .andExpect(content().json("""{"tags":["diary-list"]}"""))
             .andRespond(withSuccess("""{"success":true}""", MediaType.APPLICATION_JSON))
-        val edgeCache = EdgeCache("zone1", "token1", builder.build())
+        val edgeCache = EdgeCache(DiaryProperties.Cloudflare("zone1", "token1"), builder.build())
 
         edgeCache.purgeList()
         edgeCache.close() // 비동기 실행이 끝나길 기다린다
@@ -48,7 +49,7 @@ class EdgeCacheTest {
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build()
         server.expect(requestTo(purgeUrl)).andRespond(withServerError())
-        val edgeCache = EdgeCache("zone1", "token1", builder.build())
+        val edgeCache = EdgeCache(DiaryProperties.Cloudflare("zone1", "token1"), builder.build())
 
         edgeCache.purgeList()
         edgeCache.close()
@@ -60,7 +61,7 @@ class EdgeCacheTest {
     fun `설정이 비어 있으면 호출하지 않는다`() {
         val builder = RestClient.builder()
         val server = MockRestServiceServer.bindTo(builder).build() // 기대한 요청이 없으므로 호출되면 실패한다
-        val edgeCache = EdgeCache("", "", builder.build())
+        val edgeCache = EdgeCache(DiaryProperties.Cloudflare("", ""), builder.build())
 
         edgeCache.purgeList()
         edgeCache.close()
@@ -83,7 +84,11 @@ class EdgeCacheTest {
                         }
                 }
             }
-        val edgeCache = EdgeCache("zone1", "token1", RestClient.builder().requestFactory(factory).build())
+        val edgeCache =
+            EdgeCache(
+                DiaryProperties.Cloudflare("zone1", "token1"),
+                RestClient.builder().requestFactory(factory).build(),
+            )
 
         val startedAt = System.nanoTime()
         edgeCache.purgeList()

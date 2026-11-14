@@ -1,0 +1,9 @@
+[Unit]
+Description=diary: 1분마다 deploy 가지 보기
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Dump the diary PostgreSQL database and upload it to Object Storage
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/diary/bin/diary-pg-backup
+# root로 돌지만(Object Storage 키를 읽는다) pg_dump는 diary 사용자로 소켓에 붙는다. 쓸 수 있는 곳을 두 디렉터리로 줄인다
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/backups/diary /var/lib/diary-backup
+ProtectHome=yes
+PrivateTmp=yes
+Nice=10
+IOSchedulingClass=idle

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# [일회성 데이터 이전 2/2] 컴퓨터 1에서 실행: diary-export-heatwave가 만든 파일을 PostgreSQL diary DB에 넣고 검증한다.
+#
+#   diary-import-heatwave load   <diary-migrate-*.tar.gz | 풀어 둔 디렉터리>   적재 + 자동 검증
+#   diary-import-heatwave verify <diary-migrate-*.tar.gz | 풀어 둔 디렉터리>   검증만 (건수와 행 해시 대조)
+#
+# Flyway 이력 테이블은 옮기지 않는다. 이 DB의 flyway_schema_history는 PostgreSQL용 V1__init.sql을 앱이 처음 시작할 때
+# Flyway가 직접 적용하며 만든 것이고, MySQL 쪽 이력(체크섬이 다른 MySQL용 V1)은 필요 없다. 그래서 순서는:
+#   1. 앱을 먼저 한 번 띄워 Flyway가 빈 diaries 테이블과 이력(V1)을 만들게 한다 (배포를 해 두면 이미 그렇다)
+#   2. 이 스크립트가 빈 diaries에 행만 넣는다 → 앱은 다시 시작하지 않아도 되고, 다음 시작에서도 Flyway는 "V1 이미 적용"으로 넘어간다
+# diaries가 비어 있지 않거나 이력이 없으면 아무것도 쓰지 않고 멈춘다.
+#
+# 적재는 하나의 트랜잭션이다. 중간에 실패하면 아무 행도 남지 않는다. 변환은 모두 PostgreSQL 안에서 한다:
+#   id        32자리 16진수 → uuid (같은 16바이트)
+#   created_at 'YYYY-MM-DD HH24:MI:SS.US'(UTC 벽시계) → timestamptz ('UTC' 기준이라 세션 시간대와 무관)
+#   title, content  16진수 → bytea → UTF-8 텍스트
+#
+# 시험용 환경 변수 (기본값은 운영 방식):
+#   DIARY_PSQL           psql을 부르는 명령. 기본 'runuser -u diary -- psql -X -q -At -v ON_ERROR_STOP=1 -h /var/run/postgresql -d diary'
+#   DIARY_ROW_HASH_SQL   행 해시 SQL 파일. 기본은 이 스크립트 옆 또는 ../hoody
+set -Eeuo pipefail
+
+mode="${1:-}"
+src="${2:-}"
+[[ "$mode" == load || "$mode" == verify ]] && [[ -n "$src" ]] || { echo "usage: $0 load|verify <archive|dir>" >&2; exit 2; }
+
+DIARY_PSQL="${DIARY_PSQL:-runuser -u diary -- psql -X -q -At -v ON_ERROR_STOP=1 -h /var/run/postgresql -d diary}"
+here="$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")" && pwd)"
+hash_sql="${DIARY_ROW_HASH_SQL:-}"
+if [[ -z "$hash_sql" ]]; then
+  for c in "$here/diary-row-hash.sql" "$here/../hoody/diary-row-hash.sql"; do [[ -r "$c" ]] && hash_sql="$c" && break; done
+fi
+[[ -r "$hash_sql" ]] || { echo "diary-row-hash.sql을 찾을 수 없다" >&2; exit 1; }
+
+# shellcheck disable=SC2086
+psql_q() { $DIARY_PSQL "$@"; }
+sha256_check() { if command -v sha256sum >/dev/null; then sha256sum -c SHA256SUMS >/dev/null; else shasum -a 256 -c SHA256SUMS >/dev/null; fi; }
+
+work=""
+cleanup() { [[ -z "$work" ]] || rm -rf "$work"; }
+trap cleanup EXIT
+if [[ -d "$src" ]]; then
+  dir="$src"
+else
+  work="$(mktemp -d)"
+  chmod 700 "$work"
+  tar -C "$work" -xzf "$src"
+  dir="$work"
+fi
+for f in data.tsv manifest.tsv meta.txt SHA256SUMS; do [[ -f "$dir/$f" ]] || { echo "$f 가 없다" >&2; exit 1; }; done
+(cd "$dir" && sha256_check) || { echo "SHA256SUMS가 맞지 않는다: 전송 중 손상" >&2; exit 1; }
+rows="$(wc -l <"$dir/data.tsv" | tr -d ' ')"
+echo "원본: $rows 행 ($(grep '^exported_at_utc=' "$dir/meta.txt"))"
+
+verify() {
+  local got="$1/dest.hash"
+  psql_q <"$hash_sql" | LC_ALL=C sort >"$got"
+  LC_ALL=C sort "$dir/manifest.tsv" >"$1/src.hash"
+  local n_src n_dst
+  n_src="$(wc -l <"$1/src.hash" | tr -d ' ')"
+  n_dst="$(wc -l <"$got" | tr -d ' ')"
+  echo "건수: MySQL $n_src, PostgreSQL $n_dst"
+  if [[ "$n_src" == "$n_dst" ]] && cmp -s "$1/src.hash" "$got"; then
+    local agg
+    agg="$(if command -v sha256sum >/dev/null; then sha256sum "$got" | cut -d' ' -f1; else shasum -a 256 "$got" | cut -d' ' -f1; fi)"
+    echo "검증 통과: 모든 행의 해시가 같다 (목록 해시 ${agg:0:16}...)"
+    return 0
+  fi
+  echo "검증 실패: 행 해시가 다르다. 처음 다른 5줄:" >&2
+  diff "$1/src.hash" "$got" | head -n 5 | cut -c1-120 >&2 || true
+  return 1
+}
+
+tmpv="$(mktemp -d)"
+trap 'cleanup; rm -rf "$tmpv"' EXIT
+
+if [[ "$mode" == verify ]]; then
+  verify "$tmpv"
+  exit $?
+fi
+
+# --- 적재 ---------------------------------------------------------------------
+[[ "$(psql_q -c "select count(*) from information_schema.tables where table_name in ('diaries', 'flyway_schema_history') and table_schema = 'public'")" == 2 ]] ||
+  { echo "diaries/flyway_schema_history가 없다. 앱을 먼저 한 번 띄워 Flyway가 스키마를 만들게 한다" >&2; exit 1; }
+[[ "$(psql_q -c "select count(*) from flyway_schema_history where success and version = '1'")" == 1 ]] ||
+  { echo "Flyway 이력에 성공한 V1이 없다" >&2; exit 1; }
+existing="$(psql_q -c 'select count(*) from diaries')"
+[[ "$existing" == 0 ]] || { echo "diaries에 이미 $existing 행이 있다. 아무것도 쓰지 않고 멈춘다" >&2; exit 1; }
+
+echo "적재 중..."
+{
+  cat <<SQL
+begin;
+lock table diaries in access exclusive mode;
+create temp table stage (id_hex text not null, created text not null, title_hex text not null, content_hex text not null) on commit drop;
+copy stage from stdin;
+SQL
+  cat "$dir/data.tsv"
+  printf '\\.\n'
+  cat <<SQL
+insert into diaries (id, created_at, title, content)
+select (substr(id_hex, 1, 8) || '-' || substr(id_hex, 9, 4) || '-' || substr(id_hex, 13, 4) || '-' || substr(id_hex, 17, 4) || '-' || substr(id_hex, 21))::uuid,
+       created::timestamp at time zone 'UTC',
+       convert_from(decode(title_hex, 'hex'), 'UTF8'),
+       convert_from(decode(content_hex, 'hex'), 'UTF8')
+  from stage;
+do \$\$ begin
+  if (select count(*) from diaries) <> $rows then
+    raise exception '적재된 행 수가 원본($rows)과 다르다';
+  end if;
+end \$\$;
+commit;
+SQL
+} | psql_q >/dev/null
+
+echo "적재 완료. 검증..."
+verify "$tmpv"
+echo "Flyway 이력: $(psql_q -c "select version || ' ' || description || ' success=' || success from flyway_schema_history order by installed_rank" | paste -sd';' -)"

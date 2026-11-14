@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# 앱이 DB까지 붙어 /diary에 200을 줄 때까지 기다린다. 사용: diary-wait-healthy [최대 초]
+# diary.service의 ExecStartPost와 점검에서 쓴다. SERVER_PORT는 환경 파일에서 온다(없으면 18080).
+set -uo pipefail
+
+limit="${1:-60}"
+url="http://127.0.0.1:${SERVER_PORT:-18080}/diary?size=1"
+for ((i = 0; i < limit; i++)); do
+  if curl --fail --silent --max-time 5 --output /dev/null "$url"; then
+    exit 0
+  fi
+  sleep 1
+done
+echo "${limit}초 안에 건강해지지 않았다: $url" >&2
+exit 1
