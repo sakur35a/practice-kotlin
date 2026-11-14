@@ -1,6 +1,0 @@
-[Unit]
-Description=Dump the diary MySQL database and upload it to Object Storage
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/diary-mysql-backup

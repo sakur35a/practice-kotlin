@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# 컷오버 뒤(와 평소 점검에서) 공개 API를 Cloudflare Pages 프런트(https://diary-6c6.pages.dev/)가 쓰는 방식 그대로 두드려 본다.
+# 어느 컴퓨터에서든(내 Mac에서도) 돌린다. curl과 python3만 쓴다.
+#
+#   diary-public-check [--base URL] [--origin ORIGIN] [--local] [--write]
+#
+#   --base    기본 https://api.ssobbs13.pp.ua/diary   (프런트가 부르는 API 주소)
+#   --origin  기본 https://diary-6c6.pages.dev          (CORS 시험에 보내는 Origin)
+#   --local   Cloudflare 없이 앱 한 대를 직접 본다 (예: --base http://127.0.0.1:18080/diary --local).
+#             엣지 캐시(cf-cache-status)는 건너뛰고, Cloudflare가 지우지 않는 앱 헤더를 모두 요구한다
+#   --write   글을 한 건 실제로 쓴다(POST). 쓴 글이 엣지 목록에 나타나는지(purge가 되는지)까지 본다.
+#             API에는 지우기가 없으므로 쓴 글은 DB에서 직접 지운다. 명시했을 때만 쓴다
+#
+# 프런트가 이 API에 요구하는 것 (deploy/README.md 7절):
+#   GET  /diary, /diary/{id}  → 200 JSON, Access-Control-Allow-Origin: * (Origin이 없는 요청의 캐시된 응답이어도 브라우저가 받아들이도록)
+#   오류 → application/problem+json(RFC 9457), 브라우저가 읽을 수 있는 CORS, 캐시 금지 (deploy/README.md 7절 오류 계약)
+#   OPTIONS /diary 프리플라이트 → POST와 content-type을 허용
+#   POST /diary               → 201 + Location
+# 종료 코드: 실패가 하나라도 있으면 1
+set -uo pipefail
+
+base="https://api.ssobbs13.pp.ua/diary"
+origin="https://diary-6c6.pages.dev"
+local_mode=0
+write=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --base) base="${2:?}"; shift 2 ;;
+    --origin) origin="${2:?}"; shift 2 ;;
+    --local) local_mode=1; shift ;;
+    --write) write=1; shift ;;
+    *) echo "알 수 없는 인자: $1" >&2; exit 2 ;;
+  esac
+done
+base="${base%/}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+fails=0
+pass() { printf 'PASS  %s\n' "$*"; }
+fail() { printf 'FAIL  %s\n' "$*"; fails=$((fails + 1)); }
+info() { printf 'INFO  %s\n' "$*"; }
+
+# req <이름> <curl 인자...>: 응답 헤더를 $work/<이름>.h, 본문을 $work/<이름>.b, 상태를 $work/<이름>.s에 둔다
+req() {
+  local name="$1"; shift
+  curl -sS --max-time 30 -D "$work/$name.h" -o "$work/$name.b" -w '%{http_code}' "$@" >"$work/$name.s" 2>"$work/$name.err" || echo 000 >"$work/$name.s"
+}
+status() { cat "$work/$1.s"; }
+hdr() { # 이름 헤더
+  tr -d '\r' <"$work/$1.h" | awk -v k="$(tr '[:upper:]' '[:lower:]' <<<"$2")" -F': ' 'tolower($1) == k {sub(/^[^:]*: /, ""); v = $0} END {print v}'
+}
+json() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$work/$1.b" "$2" 2>/dev/null; }
+
+expect_hdr() { # 이름 헤더 기대값 설명
+  local got
+  got="$(hdr "$1" "$2")"
+  if [[ "$got" == "$3" ]]; then pass "$4: $2 = $3"; else fail "$4: $2 기대 '$3', 실제 '${got:-없음}'"; fi
+}
+# Cloudflare가 응답에서 지우는 헤더(Cache-Tag, Cloudflare-CDN-Cache-Control)는 공개 주소에서는 없는 것이 정상이다
+expect_app_hdr() {
+  local got
+  got="$(hdr "$1" "$2")"
+  if ((local_mode)); then
+    [[ "$got" == "$3" ]] && pass "$4: $2 = $3" || fail "$4: $2 기대 '$3', 실제 '${got:-없음}'"
+  else
+    info "$4: $2 = ${got:-(Cloudflare가 지움)}"
+  fi
+}
+
+if ((local_mode)); then mode_name="로컬"; else mode_name="공개 Cloudflare"; fi
+echo "== API: $base   Origin: $origin   모드: $mode_name"
+
+# 1. 목록 (첫 페이지)
+rnd="$RANDOM$RANDOM"
+req list -H "Origin: $origin" "$base?size=2"
+if [[ "$(status list)" == 200 ]]; then pass "목록 200"; else fail "목록 상태 $(status list) ($(head -c 200 "$work/list.err"))"; fi
+[[ "$(json list "sorted(d.keys())")" == "['hasNext', 'items', 'nextCursorId']" ]] && pass "목록 JSON 모양 (items, hasNext, nextCursorId)" || fail "목록 JSON 모양: $(head -c 200 "$work/list.b")"
+expect_hdr list cache-control "no-cache" "목록 첫 페이지"
+expect_hdr list access-control-allow-origin "*" "목록 CORS"
+expect_app_hdr list cloudflare-cdn-cache-control "max-age=300" "목록"
+expect_app_hdr list cache-tag "diary-list" "목록"
+etag="$(hdr list etag)"
+if [[ -n "$etag" ]]; then
+  pass "목록 ETag 있음"
+  req list304 -H "Origin: $origin" -H "If-None-Match: $etag" "$base?size=2"
+  [[ "$(status list304)" == 304 ]] && pass "같은 ETag로 다시 물으면 304" || fail "304 기대, 실제 $(status list304)"
+else
+  fail "목록 ETag 없음"
+fi
+first_id="$(json list "d['items'][0]['id'] if d['items'] else ''")"
+next_cursor="$(json list "d['nextCursorId'] or ''")"
+
+# 2. 상세
+if [[ -n "$first_id" ]]; then
+  req detail -H "Origin: $origin" "$base/$first_id"
+  [[ "$(status detail)" == 200 ]] && pass "상세 200" || fail "상세 상태 $(status detail)"
+  [[ "$(json detail "sorted(d.keys())")" == "['content', 'id', 'title']" ]] && pass "상세 JSON 모양 (id, title, content만)" || fail "상세 JSON 모양: $(head -c 200 "$work/detail.b")"
+  expect_hdr detail cache-control "max-age=86400, immutable" "상세"
+  expect_hdr detail access-control-allow-origin "*" "상세 CORS"
+  expect_app_hdr detail cloudflare-cdn-cache-control "max-age=86400" "상세"
+else
+  info "일기가 하나도 없어 상세 시험은 건너뜀"
+fi
+
+# 3. 이전 페이지(커서)
+if [[ -n "$next_cursor" ]]; then
+  req cursor -H "Origin: $origin" "$base?size=2&cursorId=$next_cursor"
+  [[ "$(status cursor)" == 200 ]] && pass "커서 페이지 200" || fail "커서 페이지 상태 $(status cursor)"
+  expect_hdr cursor cache-control "max-age=86400, immutable" "커서 페이지"
+else
+  info "다음 페이지가 없어 커서 시험은 건너뜀 (일기 3건 이상이어야 한다)"
+fi
+
+# 4. 오류 응답 (RFC 9457). 프런트는 오류 본문을 읽는다: 모든 오류가 같은 형식이고, 브라우저가 읽을 수 있고, 어디에도 저장되지 않아야 한다.
+#    읽기 요청과 "저장되지 않는" 쓰기 요청만 쓴다 (검증에 실패하는 POST는 아무것도 쓰지 않는다)
+problem_check() { # 이름 기대 상태 기대 title 기대 type(없으면 about:blank)
+  local name="$1" want="$2" title="$3" type="${4:-}"
+  [[ "$(status "$name")" == "$want" ]] && pass "$name: 상태 $want" || fail "$name: 상태 기대 $want, 실제 $(status "$name") ($(head -c 150 "$work/$name.b"))"
+  [[ "$(hdr "$name" content-type)" == application/problem+json* ]] && pass "$name: Content-Type application/problem+json" || fail "$name: Content-Type '$(hdr "$name" content-type)'"
+  [[ "$(json "$name" "d['status']")" == "$want" && "$(json "$name" "d['title']")" == "$title" ]] && pass "$name: status와 title($title)" || fail "$name: status/title: $(head -c 200 "$work/$name.b")"
+  [[ "$(json "$name" "d.get('type', 'about:blank')")" == "${type:-about:blank}" ]] && pass "$name: type ${type:-about:blank}" || fail "$name: type $(json "$name" "d.get('type')")"
+  expect_hdr "$name" access-control-allow-origin "*" "$name CORS"
+  expect_hdr "$name" cache-control "no-store" "$name 캐시 금지"
+  [[ "$(hdr "$name" cf-cache-status)" != HIT ]] && pass "$name: 엣지에서 HIT가 아니다" || fail "$name: 엣지가 오류를 캐시했다"
+}
+problem_base="https://api.ssobbs13.pp.ua/problems"
+req missing -H "Origin: $origin" "$base/00000000-0000-7000-8000-000000000000"
+problem_check missing 404 "Not Found"
+[[ -z "$(hdr missing cloudflare-cdn-cache-control)" ]] && pass "404에는 엣지 캐시 헤더가 없다" || fail "404에 Cloudflare-CDN-Cache-Control이 있다"
+req badsize -H "Origin: $origin" "$base?size=0"
+problem_check badsize 400 "Validation failed" "$problem_base/validation-error"
+[[ "$(json badsize "d['errors'][0]['parameter'] + ':' + d['errors'][0]['code']")" == "size:too-small" ]] && pass "badsize: errors[0] = parameter size, code too-small" || fail "badsize: errors $(head -c 200 "$work/badsize.b")"
+req badtype -H "Origin: $origin" "$base?size=abc"
+problem_check badtype 400 "Malformed request" "$problem_base/malformed-request"
+req badbody -X POST -H "Origin: $origin" -H "Content-Type: application/json" --data '{"title":null,"id":"7d444840-9dc0-41d8-9e7d-0f4c2f9a8e4a"}' "$base"
+problem_check badbody 422 "Validation failed" "$problem_base/validation-error"
+[[ "$(json badbody "','.join(sorted(e['pointer'] + ':' + e['code'] for e in d['errors']))")" == "/content:required,/id:not-uuid-v7,/title:required" ]] && pass "badbody: errors의 pointer와 code" || fail "badbody: errors $(head -c 300 "$work/badbody.b")"
+req badmethod -X PUT -H "Origin: $origin" "$base"
+problem_check badmethod 405 "Method Not Allowed"
+grep -q 'POST' <<<"$(hdr badmethod allow)" && pass "badmethod: Allow 헤더에 POST가 있다" || fail "badmethod: Allow '$(hdr badmethod allow)'"
+# 같은 요청을 한 번 더 보내도 엣지가 오류를 저장하지 않는다 (공개 주소에서만 뜻이 있다)
+if ((!local_mode)); then
+  req missing2 -H "Origin: $origin" "$base/00000000-0000-7000-8000-000000000000"
+  [[ "$(hdr missing2 cf-cache-status)" != HIT ]] && pass "404를 두 번 보내도 HIT가 아니다" || fail "404가 엣지에 저장되었다"
+fi
+
+# 5. 프리플라이트 (프런트가 JSON POST 전에 보낸다)
+req preflight -X OPTIONS -H "Origin: $origin" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type" "$base"
+code="$(status preflight)"
+[[ "$code" == 200 || "$code" == 204 ]] && pass "프리플라이트 $code" || fail "프리플라이트 상태 $code"
+acao="$(hdr preflight access-control-allow-origin)"
+[[ "$acao" == "*" || "$acao" == "$origin" ]] && pass "프리플라이트 Allow-Origin = $acao" || fail "프리플라이트 Allow-Origin '${acao:-없음}'"
+grep -qi 'POST' <<<"$(hdr preflight access-control-allow-methods)" && pass "프리플라이트가 POST를 허용" || fail "프리플라이트 Allow-Methods에 POST가 없다: '$(hdr preflight access-control-allow-methods)'"
+allow_headers="$(hdr preflight access-control-allow-headers)"
+{ grep -qi 'content-type' <<<"$allow_headers" || [[ "$allow_headers" == "*" ]]; } && pass "프리플라이트가 content-type을 허용" || fail "프리플라이트 Allow-Headers '${allow_headers:-없음}'"
+
+# 6. 공개 주소: Cloudflare를 거치는지, 캐시 규칙이 동작하는지
+if ((!local_mode)); then
+  if [[ -n "$(hdr list cf-ray)" ]]; then pass "Cloudflare를 거친다 (cf-ray $(hdr list cf-ray))"; else fail "cf-ray가 없다: Cloudflare를 거치지 않았다(DNS가 아직 옛 곳이거나 프록시가 꺼짐)"; fi
+  # 실행마다 다른 쿼리로 새 캐시 키를 만들어 첫 요청은 MISS, 둘째는 HIT이어야 한다 (캐시 규칙: 호스트 api.ssobbs13.pp.ua, 경로 /diary로 시작)
+  req c1 -H "Origin: $origin" "$base?size=3&check=$rnd"
+  req c2 -H "Origin: $origin" "$base?size=3&check=$rnd"
+  s1="$(hdr c1 cf-cache-status)"; s2="$(hdr c2 cf-cache-status)"
+  if [[ "$s2" == HIT ]]; then pass "엣지 캐시 동작: 첫 요청 ${s1:-?}, 다음 요청 HIT"; else fail "엣지 캐시가 동작하지 않는다: 첫 ${s1:-?}, 다음 ${s2:-?} (Cloudflare 캐시 규칙을 확인한다)"; fi
+  if [[ -n "$first_id" ]]; then
+    req d1 "$base/$first_id"; req d2 "$base/$first_id"
+    [[ "$(hdr d2 cf-cache-status)" == HIT ]] && pass "상세도 엣지에서 HIT" || fail "상세 엣지 캐시: $(hdr d1 cf-cache-status) → $(hdr d2 cf-cache-status)"
+  fi
+fi
+
+# 7. 쓰기 (명시했을 때만)
+if ((write)); then
+  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  payload="{\"title\":\"점검 $stamp\",\"content\":\"diary-public-check가 쓴 글. 지워도 된다.\"}"
+  req post -X POST -H "Origin: $origin" -H "Content-Type: application/json" --data "$payload" "$base"
+  if [[ "$(status post)" == 201 ]]; then
+    new_id="$(json post "d['id']")"
+    pass "POST 201, id $new_id, Location $(hdr post location)"
+    expect_hdr post access-control-allow-origin "*" "POST 응답 CORS"
+    # 엣지가 5분 캐시하는 첫 페이지 목록에 새 글이 곧 보여야 한다 (앱이 태그 purge를 요청한다. 보통 1초 안쪽)
+    seen=""
+    for i in $(seq 1 15); do
+      req after -H "Origin: $origin" "$base?size=2"
+      if [[ "$(json after "d['items'][0]['id'] if d['items'] else ''")" == "$new_id" ]]; then seen="$i"; break; fi
+      sleep 1
+    done
+    [[ -n "$seen" ]] && pass "새 글이 목록 맨 위에 나타났다 (${seen}번째 시도, purge 동작)" || fail "15초 안에 새 글이 목록에 나타나지 않았다 (엣지 purge 실패? 앱 로그의 edge_purge_failed, CLOUDFLARE_* 값 확인)"
+    req newdetail "$base/$new_id"
+    [[ "$(status newdetail)" == 200 ]] && pass "새 글 상세 200" || fail "새 글 상세 상태 $(status newdetail)"
+    info "쓴 글은 API로 지울 수 없다. 지우려면 컴퓨터 1에서: runuser -u diary -- psql -h /var/run/postgresql -d diary -c \"delete from diaries where id = '$new_id'\" 그리고 목록 캐시를 purge한다"
+  else
+    fail "POST 상태 $(status post): $(head -c 200 "$work/post.b")"
+  fi
+else
+  info "쓰기 시험은 건너뜀 (--write로 켠다. 쓴 글은 API로 지울 수 없다)"
+fi
+
+echo
+if ((fails == 0)); then echo "결과: 모두 통과"; else echo "결과: 실패 ${fails}건"; fi
+exit $((fails > 0))

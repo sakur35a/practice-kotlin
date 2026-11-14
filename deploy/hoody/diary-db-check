@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# 앱이 PostgreSQL에 붙을 수 있는지 앱과 같은 신분(diary 사용자)으로 시험한다. 비밀번호는 출력하지 않는다.
+#
+#   diary-db-check
+#
+# 유닉스 소켓(peer 인증)과 loopback TCP(scram 비밀번호)를 둘 다 시험해서 어느 쪽을 쓸지 정하는 근거를 준다.
+# 이 컴퓨터의 다른 앱 README는 "방화벽이 5432를 loopback까지 막는다"고 하는데, root의 pg_isready는 통과한다.
+# 방화벽 규칙이 사용자별일 수 있으므로 root가 아니라 diary 사용자로 직접 해 봐야 한다.
+set -uo pipefail
+
+env_file=/etc/diary/diary.env
+[[ $EUID -eq 0 ]] || { echo "root로 실행한다 (diary 사용자로 바꿔서 시험한다)" >&2; exit 1; }
+
+get() { /opt/diary/bin/diary-env get "$1" --file "$env_file" 2>/dev/null | cat; }
+fail_count=0
+pass() { printf 'PASS  %-32s %s\n' "$1" "${2:-}"; }
+fail() { printf 'FAIL  %-32s %s\n' "$1" "${2:-}"; fail_count=$((fail_count + 1)); }
+info() { printf 'INFO  %-32s %s\n' "$1" "${2:-}"; }
+
+url="$(get SPRING_DATASOURCE_URL)"
+user="$(get SPRING_DATASOURCE_USERNAME)"
+password="$(get SPRING_DATASOURCE_PASSWORD)"
+[[ -n "$url" && -n "$user" ]] || { echo "$env_file 에 SPRING_DATASOURCE_URL/USERNAME이 없다" >&2; exit 1; }
+if [[ "$password" == CHANGE_ME* ]]; then password=""; fi
+dbname="${url#jdbc:postgresql://}"
+dbname="${dbname#*/}"
+dbname="${dbname%%\?*}"
+if [[ "$url" == *socketFactoryArg=* ]]; then chosen="유닉스 소켓"; else chosen="loopback TCP"; fi
+echo "== 지금 설정: $chosen, 사용자 $user, DB $dbname"
+
+# 앱과 같은 사용자로 실행한다. 비밀번호는 환경변수로만 넘긴다 (-m: 환경 유지, 인자에 안 나온다). HOME은 root의 것을 쓰지 않게 한다
+as_diary() { HOME=/nonexistent PGPASSWORD="$password" runuser -m -u diary -- "$@"; }
+
+socket_ok=0
+tcp_ok=0
+if out="$(as_diary psql -X -q -At -h /var/run/postgresql -d "$dbname" -U "$user" -c 'select current_user' 2>&1)"; then
+  pass "유닉스 소켓 + peer 인증" "current_user=$out"
+  socket_ok=1
+else
+  fail "유닉스 소켓 + peer 인증" "$(head -c 200 <<<"$out")"
+fi
+
+if timeout 6 runuser -u diary -- bash -c 'exec 3<>/dev/tcp/127.0.0.1/5432' 2>/dev/null; then
+  pass "loopback TCP 5432 연결" "diary 사용자도 열린다"
+  if [[ -z "$password" ]]; then
+    info "loopback TCP + 비밀번호" "비밀번호를 아직 채우지 않아 건너뜀"
+  elif out="$(as_diary psql -X -q -At "host=127.0.0.1 port=5432 dbname=$dbname user=$user connect_timeout=5" -c 'select current_user' 2>&1)"; then
+    pass "loopback TCP + 비밀번호" "current_user=$out"
+    tcp_ok=1
+  else
+    fail "loopback TCP + 비밀번호" "$(head -c 200 <<<"$out")"
+  fi
+else
+  info "loopback TCP 5432 연결" "diary 사용자는 막힌다 (방화벽). 소켓을 쓴다"
+fi
+
+echo
+if ((socket_ok)); then
+  echo "권장: 유닉스 소켓 (기본값). 비밀번호가 필요 없고 DB가 네트워크에 열리지 않으며 방화벽과 무관하다."
+elif ((tcp_ok)); then
+  echo "권장: loopback TCP. diary.env의 SPRING_DATASOURCE_URL을 TCP 줄로 바꾼다 (소켓이 막혀 있다)."
+else
+  echo "둘 다 안 된다. postgresql 서비스, 역할 diary, pg_hba.conf(local ... peer)를 확인한다."
+fi
+((tcp_ok && socket_ok)) && echo "둘 다 된다. 소켓을 쓴다."
+exit $((socket_ok == 0 && tcp_ok == 0))

@@ -1,17 +1,17 @@
+# 로컬 개발용 PostgreSQL. 운영과 같은 17 버전을 쓴다 (application-local.yaml이 이 값으로 붙는다)
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: mysql-8.4
+  postgres:
+    image: postgres:17-alpine
+    container_name: diary-postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: mydb
-      MYSQL_USER: myuser
-      MYSQL_PASSWORD: mypassword
+      POSTGRES_USER: diary
+      POSTGRES_PASSWORD: diary
+      POSTGRES_DB: diary
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysqldata:/var/lib/mysql
+      - pgdata:/var/lib/postgresql/data
 
 volumes:
-  mysqldata:
+  pgdata:

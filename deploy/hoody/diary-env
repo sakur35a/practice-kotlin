@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# 환경 파일의 값을 읽고 쓴다. 값은 항상 표준 입력/출력으로만 오가고 인자나 화면에 나오지 않는다.
+#
+#   printf '%s' "$VALUE" | diary-env set KEY [--file /etc/diary/diary.env]
+#   diary-env get KEY [--file ...]          터미널이면 거부한다 (다른 컴퓨터로 파이프할 때만)
+#   diary-env has KEY [--file ...]          값이 있고 CHANGE_ME가 아니면 0
+#
+# 예: Mac 클립보드의 값을 서버 환경 파일에 쓴다 (값이 화면과 셸 기록에 남지 않는다)
+#   pbpaste | ssh hoody-diary diary-env set SLACK_WEBHOOK_URL
+set -Eeuo pipefail
+
+cmd="${1:-}"
+key="${2:-}"
+file=/etc/diary/diary.env
+if [[ "${3:-}" == "--file" ]]; then file="${4:?--file 뒤에 경로가 필요하다}"; fi
+[[ "$cmd" =~ ^(set|get|has)$ && "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "usage: diary-env set|get|has KEY [--file FILE]" >&2; exit 2; }
+[[ -f "$file" ]] || { echo "파일이 없다: $file" >&2; exit 1; }
+
+current() {
+  KEY="$key" awk 'index($0, ENVIRON["KEY"] "=") == 1 {print substr($0, length(ENVIRON["KEY"]) + 2); exit}' "$file"
+}
+
+case "$cmd" in
+  get)
+    if [[ -t 1 ]]; then echo "화면에 비밀 값을 찍지 않는다. 파이프로만 쓴다" >&2; exit 1; fi
+    current
+    ;;
+  has)
+    value="$(current)"
+    [[ -n "$value" && "$value" != CHANGE_ME* ]]
+    ;;
+  set)
+    IFS= read -r value || [[ -n "${value:-}" ]] || true
+    [[ -n "$value" ]] || { echo "빈 값은 쓰지 않는다" >&2; exit 1; }
+    tmp="$(mktemp "${file}.XXXXXX")"
+    trap 'rm -f "$tmp"' EXIT
+    cp -p "$file" "$tmp"
+    # awk -v는 백슬래시를 해석하므로 환경변수로 넘긴다
+    KEY="$key" VALUE="$value" awk '
+      BEGIN { k = ENVIRON["KEY"] "="; v = ENVIRON["VALUE"] }
+      index($0, k) == 1 { print k v; found = 1; next }
+      { print }
+      END { if (!found) print k v }
+    ' "$file" >"$tmp"
+    mv "$tmp" "$file"
+    trap - EXIT
+    echo "$key 를 $file 에 썼다"
+    ;;
+esac

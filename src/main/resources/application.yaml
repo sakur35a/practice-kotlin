@@ -7,7 +7,7 @@ spring:
       minimum-idle: 1
       connection-timeout: 2000
       validation-timeout: 1000
-      # DB 재시작(점검) 뒤 죽은 연결을 요청 전에 걸러낸다
+      # PostgreSQL 재시작(패키지 업데이트) 뒤 죽은 연결을 요청 전에 걸러낸다
       keepalive-time: 30000
   jpa:
     open-in-view: false
@@ -20,8 +20,14 @@ spring:
           time_zone: UTC
   profiles:
     default: local
+  mvc:
+    problemdetails:
+      # RFC 9457 오류 응답. 이 API는 같은 일을 GlobalExceptionHandler(ResponseEntityExceptionHandler 상속)가 하므로
+      # 이 값은 그 클래스를 지울 때를 위한 안전망이다 (Spring Boot는 직접 만든 핸들러가 있으면 자기 것을 등록하지 않는다)
+      enabled: true
 management:
-  # 컨테이너 밖에는 127.0.0.1로만 노출한다 (deploy/start.sh)
+  # 액추에이터는 앱과 다른 포트다. 바인딩 주소(127.0.0.1)와 포트는 서버에서 환경변수로 정한다
+  # (SERVER_ADDRESS, SERVER_PORT, MANAGEMENT_SERVER_ADDRESS, MANAGEMENT_SERVER_PORT. deploy/hoody/diary.service, /etc/diary/diary.env)
   server:
     port: 8081
   endpoints:
@@ -37,7 +43,8 @@ server:
       max: 32
       min-spare: 2
 slack:
-  webhook-url: ${SLACK_WEBHOOK_URL:http://localhost:8080/dummy}
+  # 비어 있으면 Slack 알림을 보내지 않는다
+  webhook-url: ${SLACK_WEBHOOK_URL:}
 diary:
   cloudflare:
     # 글이 써지면 엣지에 캐시된 목록을 purge한다. 비어 있으면 건너뛴다

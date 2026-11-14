@@ -1,0 +1,54 @@
+# main에 올라온 커밋을 시험하고, 통과하면 deploy 가지를 그 커밋으로 옮긴다.
+# hoody 컴퓨터가 1분마다 deploy 가지를 보고(deploy/hoody/diary-pull-deploy) 새 커밋이면 빌드해서 올린다.
+# 그래서 이 워크플로는 서버에 들어갈 수 있는 비밀(SSH 키, Cloudflare Access 토큰 등)을 하나도 들고 있지 않다.
+# (옛 OCI 배포는 이미지를 ghcr에 올리고 SSH로 서버에 들어갔다. 그 방식과 시크릿은 모두 없앴다)
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# 같은 deploy 가지를 동시에 옮기지 않는다. 진행 중인 것은 끝까지 두고 다음 것을 기다린다
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run checks
+        run: ./gradlew check
+
+  release:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Move the deploy branch
+        # 서버는 읽기 전용 deploy key로 이 가지만 가져간다. 강제로 옮기는 것은 이 가지가 "마지막으로 시험을 통과한 커밋"을
+        # 가리키는 표시일 뿐이라서다(역사를 쌓지 않는다).
+        run: git push --force origin "$GITHUB_SHA:refs/heads/deploy"

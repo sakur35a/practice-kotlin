@@ -1,0 +1,13 @@
+[Unit]
+Description=diary: deploy 가지가 움직였으면 이 컴퓨터에서 빌드해서 올리기
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/diary/bin/diary-pull-deploy
+# 세 컴퓨터가 2코어와 6GB를 나눠 쓴다. 빌드가 서비스를 밀어내지 않도록 낮은 우선순위와 메모리 상한을 둔다
+Nice=15
+CPUWeight=20
+IOSchedulingClass=idle
+MemoryMax=2G
+TimeoutStartSec=30min

@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# 매일 pg_dump를 떠서 Object Storage에 올린다. 컴퓨터 1에서만 돈다 (diary-pg-backup.timer).
+# 단일 컴퓨터라 이 덤프가 컴퓨터 밖으로 나가는 유일한 사본이다.
+#
+# 순서: 덤프 → 점검(올리기 전) → 로컬 보관 → 업로드(크기 대조) → 업로드가 성공했을 때만 버킷 정리
+# 로컬에는 최신 3개를 남긴다(빠른 복원용). 버킷에는 최신 OS_KEEP_NEWEST개를 남긴다.
+# 실패하면 이벤트 로그(/var/lib/diary-backup/events.jsonl)와 Slack에 남기고, 어떤 것도 지우지 않는다.
+
+source /opt/diary/bin/diary-pg-lib.sh
+
+readonly KEEP_LOCAL=3
+# MySQL 시절에는 1개(하루치)였다. 컴퓨터 한 대에는 로컬 사본도 같은 디스크에 있어서 버킷이 유일한 외부 사본이다.
+# 잘못된 덤프가 하루치를 덮어쓰지 않도록 3개로 늘렸다 (일기 DB는 작아서 무료 20GB 한도에 영향이 없다). 최소 1이다
+readonly OS_KEEP_NEWEST=3
+readonly MIN_BYTES=2048
+
+file="diary-$(date -u +%Y%m%dT%H%M%SZ)-$(hostname).dump"
+tmp="$BACKUP_DIR/$file.tmp"
+
+fail() {
+  rm -f "$tmp"
+  log_event backup_failed reason="$1"
+  slack "PostgreSQL 백업 실패: $1"
+  exit 1
+}
+
+# 형식 -Fc: 압축되고 pg_restore로 일부만 골라 복원할 수 있다. 비밀번호가 필요 없다(소켓 peer)
+as_diary pg_dump -h /var/run/postgresql -d diary -Fc >"$tmp" 2>"$STATE_DIR/pg_dump.err" ||
+  fail "pg_dump 실패: $(head -c 200 "$STATE_DIR/pg_dump.err")"
+
+# 비어 있거나 깨진 덤프를 올리지 않는다
+size="$(stat -c %s "$tmp")"
+((size >= MIN_BYTES)) || fail "덤프가 너무 작다: ${size} bytes"
+list="$(pg_restore -l "$tmp" 2>/dev/null)" || fail "pg_restore -l 이 덤프를 읽지 못한다"
+grep -q 'TABLE DATA public diaries ' <<<"$list" || fail "덤프에 diaries 데이터가 없다"
+grep -q 'TABLE DATA public flyway_schema_history ' <<<"$list" || fail "덤프에 flyway_schema_history 데이터가 없다"
+
+# 일기는 만들기만 하고 지우는 API가 없다. 행 수가 지난 정상 백업보다 줄었으면 데이터가 사라진 것이므로 덮어쓰지 않는다.
+# (일부러 행을 지웠다면 /var/lib/diary-backup/last-rows 를 지우거나 새 값으로 고친다)
+rows="$(dump_rows "$tmp")"
+last_rows="$(cat "$STATE_DIR/last-rows" 2>/dev/null || echo 0)"
+((rows >= last_rows)) || fail "행 수가 줄었다: 덤프 $rows < 지난 정상 백업 $last_rows"
+
+mv "$tmp" "$BACKUP_DIR/$file"
+echo "$rows" >"$STATE_DIR/last-rows"
+
+copied_os=skipped
+if [[ -r "$DIARY_OS_ENV" ]] && ! grep -q CHANGE_ME "$DIARY_OS_ENV"; then
+  if os_out="$("$OS_TOOL" put "$BACKUP_DIR/$file" "$OS_PREFIX$file" 2>&1)"; then
+    copied_os=ok
+    # 업로드와 크기 대조가 끝난 뒤에만 정리한다. diary-os-put은 최신 1개 미만으로는 절대 지우지 않는다
+    "$OS_TOOL" prune "$OS_PREFIX" 0 --keep-newest "$OS_KEEP_NEWEST" >/dev/null 2>&1 || log_event os_prune_failed
+  else
+    copied_os=failed
+    log_event os_upload_failed error="${os_out:0:300}"
+    slack "Object Storage 업로드 실패: $file (${os_out:0:150})"
+  fi
+else
+  # 키를 아직 채우지 않았다면 알려야 한다: 컴퓨터 밖 사본이 없다
+  copied_os=no_credentials
+  log_event os_skipped reason="objectstorage.env 없음 또는 CHANGE_ME"
+  slack "Object Storage 키가 없어 외부 사본 없이 로컬에만 백업했다: $file"
+fi
+
+# 날짜가 아니라 개수로 남긴다: 백업이 여러 날 실패해도 마지막 덤프가 지워지지 않는다
+ls -1t "$BACKUP_DIR"/diary-*.dump | tail -n +$((KEEP_LOCAL + 1)) | xargs -r rm -f
+log_event backup_done file="$file" bytes="$size" rows="$rows" copy_os="$copied_os"
+# 로컬 덤프는 만들어졌지만 컴퓨터 밖 사본이 없으면 유닛을 실패로 남긴다 (systemctl --failed에서 보이게)
+[[ "$copied_os" == ok ]] || exit 1

@@ -1,5 +1,3 @@
-import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
-
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
@@ -29,22 +27,26 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-restclient")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     implementation("com.fasterxml.uuid:java-uuid-generator:5.1.0")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
-    implementation("org.flywaydb:flyway-mysql")
+    implementation("org.flywaydb:flyway-database-postgresql")
 
-    runtimeOnly("com.mysql:mysql-connector-j")
+    runtimeOnly("org.postgresql:postgresql")
+    // PostgreSQL 유닉스 소켓(peer 인증)으로 붙을 때만 쓴다. pgjdbc는 소켓을 직접 열 줄 몰라서 소켓 팩토리가 필요하다.
+    // JDBC URL의 socketFactory=... 한 줄을 바꾸는 것으로 TCP와 소켓 중에 고른다 (deploy/README.md)
+    runtimeOnly("com.kohlschutter.junixsocket:junixsocket-core:2.11.1")
 
     testImplementation("org.mockito.kotlin:mockito-kotlin:6.1.0")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-    testImplementation("org.testcontainers:testcontainers-mysql")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -65,25 +67,7 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-tasks.named<BootBuildImage>("bootBuildImage") {
-    val imageRepository = "ghcr.io/sakur35a/practice-kotlin"
-
-    imageName.set("$imageRepository:${project.version}")
-    tags.set(listOf("$imageRepository:latest"))
-    createdDate.set("now")
-    environment.set(
-        mapOf(
-            // 빌드 중 훈련 실행으로 JVM AOT 캐시를 만들어 이미지에 담는다 (기동 시간 단축)
-            "BP_JVM_AOTCACHE_ENABLED" to "true",
-            "TRAINING_RUN_JAVA_TOOL_OPTIONS" to "-XX:TieredStopAtLevel=1 -Dspring.profiles.active=training",
-        ),
-    )
-    imagePlatform.set("linux/amd64")
-
-    docker {
-        publishRegistry {
-            username.set(providers.environmentVariable("GHCR_USERNAME"))
-            password.set(providers.environmentVariable("GHCR_TOKEN"))
-        }
-    }
+// 배포 스크립트(deploy/hoody)가 파일 이름을 고정해서 쓴다
+tasks.bootJar {
+    archiveFileName.set("diary.jar")
 }

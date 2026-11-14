@@ -1,0 +1,39 @@
+[Unit]
+Description=diary API (Spring Boot)
+After=network.target postgresql.service
+
+[Service]
+User=diary
+Group=diary
+# 비밀 값(DB 비밀번호, Slack, Cloudflare 토큰)은 이 파일에만 있다. root:diary 0640
+EnvironmentFile=/etc/diary/diary.env
+ExecStart=/opt/diary/bin/diary-run
+# 앱이 실제로 DB까지 붙어서 /diary에 200을 줄 때까지 기다린다. 이 단계가 끝나야 서비스가 active가 되므로
+# `systemctl restart diary`가 곧 "새 버전이 건강하다"는 확인이다(실패하면 배포 스크립트가 되돌린다)
+ExecStartPost=/opt/diary/bin/diary-wait-healthy 150
+Restart=always
+RestartSec=5
+TimeoutStartSec=180
+TimeoutStopSec=30
+# JVM이 SIGTERM으로 끝나면 143을 돌려준다
+SuccessExitStatus=143
+
+# 다른 앱(cheotmadi)과 같은 컴퓨터를 쓰므로 권한을 줄인다. JIT 때문에 MemoryDenyWriteExecute는 쓰지 않는다
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# 컴퓨터 하나(2코어, 6GB)를 PostgreSQL, cloudflared, 다른 앱, 빌드와 나눠 쓴다. 이 서비스가 폭주해도 컴퓨터 전체가 죽지 않게 상한을 둔다
+# (힙 최대 768M + 메타스페이스·코드 캐시·스레드·네이티브 약 250M + 여유)
+MemoryHigh=1200M
+MemoryMax=1500M
+TasksMax=512
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
