@@ -126,19 +126,20 @@ ssh hoody-diary /opt/diary/bin/diary-db-check
 
 | 항목 | 대략적인 사용량 |
 |---|---|
-| diary 앱(JVM) | 힙 최대 768MB + 비힙 약 250MB = 최대 약 1GB. 평소 RSS는 로컬 측정으로 약 270~300MB |
-| PostgreSQL 17 | 약 250MB (shared_buffers 128MB + 연결). cheotmadi도 같은 서버를 쓴다 |
+| diary 앱(JVM) | 힙 최대 2GB + 비힙 약 350MB = 최대 약 2.4GB. 실제 cgroup 약 400MB, GC 뒤 살아 있는 데이터 약 40MB (2026-11-20) |
+| PostgreSQL 17 | 약 90MB. DB는 diary 하나뿐이다 |
 | cloudflared | 약 50MB |
-| cheotmadi-api (Go) | 수십 MB |
+| hoody 에이전트 | 약 250MB |
 | 배포 빌드(Gradle) | 최대 2GB (`diary-deploy.service`의 `MemoryMax`). 몇 분 동안만 |
-| 합계 | 최대 약 4GB. 나머지는 페이지 캐시 |
+| 합계 | 상한끼리 약 5.4GB(앱 3GB + 빌드 2GB + 나머지). 나머지는 페이지 캐시 |
 
-앱 유닛에는 `MemoryHigh=1200M`, `MemoryMax=1500M`을 두었다(스왑이 없어서 OOM은 곧 프로세스 종료이고, 이 컴퓨터에는 다른 앱이 있다). 플래그는 `deploy/hoody/diary-jvm.conf` 한 곳이고 `diary-run`과 AOT 훈련이 같이 읽는다. 512MB 컨테이너 시절(`start.sh`)과 달라진 것:
+앱 유닛에는 `MemoryHigh=2600M`, `MemoryMax=3000M`을 두었다(스왑이 없어서 OOM은 곧 프로세스 종료다). 2026-11-20까지는 첫마디의 요약 LLM(llama-server, `MemoryMax=3500M`)이
+같은 컴퓨터에 있어서 힙 768MB, `MemoryMax=1500M` 이었다. LLM이 Cloudflare Workers AI로 떠나면서 키웠다. 플래그는 `deploy/hoody/diary-jvm.conf` 한 곳이고 `diary-run`과 AOT 훈련이 같이 읽는다. 512MB 컨테이너 시절(`start.sh`)과 달라진 것:
 
 | | 옛 | 지금 | 이유 |
 |---|---|---|---|
-| 힙 | buildpack 메모리 계산기 | `-Xms256m -Xmx768m` | 계산기가 없다. 본문 수 MB를 ETag 필터가 통째로 버퍼링해도 수십 MB라 충분하고 여유를 둔다 |
-| GC | (코어 1이라 Serial) | `-XX:+UseSerialGC` | 코어 2개와 6GB를 보고 JVM이 G1을 고르는데, 이 힙과 CPU 사정에서는 G1의 스레드와 메타데이터가 낭비다 |
+| 힙 | buildpack 메모리 계산기 | `-Xms256m -Xmx2g` | 계산기가 없다. 평소에는 수십 MB만 살아 있고, 몰릴 때(ETag 필터가 큰 응답을 통째로 버퍼링 등) 2GB까지 는다 |
+| GC | (코어 1이라 Serial) | `-XX:+UseG1GC`, `-XX:ParallelGCThreads=2`, `-XX:ConcGCThreads=1`, `-XX:G1PeriodicGCInterval=300000` | 힙이 2GB까지 크면 Serial의 전체 GC 정지가 힙에 비례해 길어진다. G1은 젊은 영역만 자주 치우고 오래된 영역은 동시에 표시해 정지를 목표(200ms) 안에 둔다. ZGC는 동시 작업에 CPU·메모리를 더 써서 2코어 공유 컴퓨터에 맞지 않는다. JDK가 호스트 코어 12개를 보고 GC 스레드를 10개 만들어서 2개(동시 표시 1개)로 정했다. 5분 동안 GC가 없으면 쓰지 않는 힙을 OS에 돌려줘서 배포 빌드 자리를 남긴다 |
 | JIT | `-XX:TieredStopAtLevel=1` | 유지 | **이유가 메모리에서 CPU로 바뀌었다.** 코어 2개를 PostgreSQL, cloudflared, 다른 앱, 배포 빌드와 나눠 쓰므로 C2 컴파일이 시작 직후 한 코어를 몇 초 잡는 것을 피한다. 트래픽 대부분이 엣지 캐시에서 끝나 최고 처리량보다 CPU 점유가 중요하다 |
 | 코드 캐시 | `-XX:ReservedCodeCacheSize=96M` | 유지 | 예약만 하는 값이라 비용이 없고 여유가 있다 |
 | 메타스페이스 | `-XX:MetaspaceSize=128M` | 유지 + `MaxMetaspaceSize=256M` | 사용량(약 110MB)이 기본 임계값을 넘을 때 기동 중 나던 Full GC(300~800ms)를 피한다. 상한은 누수 방어 |
@@ -150,7 +151,7 @@ ssh hoody-diary /opt/diary/bin/diary-db-check
 | AOT 캐시 | buildpack 훈련 | `-XX:AOTCacheOutput`(배포 때, `-XX:AOTCache`로 사용) | 로컬 측정으로 기동 약 2.5초 → 약 1.2초. 캐시가 없거나 깨지면 JVM이 경고만 내고 캐시 없이 뜬다. 캐시는 JDK와 jar 경로에 묶여서 컴퓨터에서 만든다. 재배치(`ArchiveRelocationMode`)는 기본값(ASLR)을 유지한다 |
 | Tomcat/Hikari | 최대 32 스레드, 풀 4 | 그대로 | 동작을 바꾸지 않는다 |
 
-키우고 싶으면 `diary.env`에 `JAVA_OPTS_EXTRA=-Xmx1g` 처럼 임시로 더한다(`diary-run`이 뒤에 붙인다).
+더 바꾸고 싶으면 `diary.env`에 `JAVA_OPTS_EXTRA=-Xmx2500m` 처럼 임시로 더한다(`diary-run`이 뒤에 붙인다). 유닛의 `MemoryMax`(3000M)를 넘지 않게 한다.
 
 ## 6. 백업과 복원
 
@@ -395,7 +396,7 @@ journald는 영구 저장이다(`/var/log/journal`). 크기와 보관 기간은 
 |---|---|---|
 | 서버 | VM 두 대(1/8 OCPU, 1GB, haproxy 1:2) | 컴퓨터 하나(2코어, 6GB를 다른 앱과 공유) |
 | DB | HeatWave MySQL(HA 없음, 점검 창 월요일, 버전이 강제로 올라감, 자체 백업 1일) | 같은 컴퓨터의 PostgreSQL 17 |
-| 앱 | buildpack 이미지, podman, 512MB | jar + systemd, JDK 25(apt), 힙 768MB |
+| 앱 | buildpack 이미지, podman, 512MB | jar + systemd, JDK 25(apt), 힙 2GB(G1) |
 | 배포 | CI가 SSH(Cloudflare Access 서비스 토큰)로 두 서버에 접속해 이미지 교체 | CI는 `deploy` 가지만 옮기고, 컴퓨터가 가져가 빌드·교체·되돌리기. GitHub에는 서버 자격이 없다 |
 | 비밀 | OCI Vault 3개 + 인스턴스 주체 | `/etc/diary/diary.env`(`root:diary 0640`) |
 | 입구 | 터널 하나, 커넥터 두 개 → haproxy 두 앱 | 기존 cloudflared 터널의 규칙 하나 → 앱 하나 |
