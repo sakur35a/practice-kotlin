@@ -18,7 +18,7 @@ TimeoutStopSec=30
 # JVM이 SIGTERM으로 끝나면 143을 돌려준다
 SuccessExitStatus=143
 
-# 다른 앱(cheotmadi)과 같은 컴퓨터를 쓰므로 권한을 줄인다. JIT 때문에 MemoryDenyWriteExecute는 쓰지 않는다
+# 같은 컴퓨터에 다른 서비스가 있으므로 권한을 줄인다. JIT 때문에 MemoryDenyWriteExecute는 쓰지 않는다
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -28,10 +28,10 @@ ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-# 컴퓨터 하나(2코어, 6GB)를 PostgreSQL, cloudflared, 다른 앱, 빌드와 나눠 쓴다. 이 서비스가 폭주해도 컴퓨터 전체가 죽지 않게 상한을 둔다
-# (힙 최대 768M + 메타스페이스·코드 캐시·스레드·네이티브 약 250M + 여유)
-MemoryHigh=1200M
-MemoryMax=1500M
+# 컴퓨터 하나(2코어, 6GB)를 PostgreSQL, cloudflared, 빌드와 나눠 쓴다. 이 서비스가 폭주해도 컴퓨터 전체가 죽지 않게 상한을 둔다
+# (힙 최대 2G + 메타스페이스·코드 캐시·스레드·G1 자료구조·네이티브 약 350M + 여유. 예산은 diary-jvm.conf)
+MemoryHigh=2600M
+MemoryMax=3000M
 TasksMax=512
 LimitNOFILE=65536
 
